@@ -16,8 +16,9 @@ This validates that the "DevOps Toolbox" container is correctly configured.
 
 import subprocess
 from typing import Dict, Any
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 import logging
 
 # Configure logging
@@ -263,8 +264,116 @@ async def root() -> Dict[str, str]:
         "message": "Welcome to InfraGenie Backend API",
         "version": "1.0.0",
         "documentation": "/docs",
-        "health_check": "/health"
+        "health_check": "/health",
+        "test_workflow": "/test/generate"
     }
+
+
+# Pydantic model for test generation request
+class TestGenerateRequest(BaseModel):
+    """Request model for test workflow execution."""
+    prompt: str = Field(
+        ...,
+        description="Infrastructure request in natural language",
+        example="Create an EC2 instance with SSH access"
+    )
+
+
+class TestGenerateResponse(BaseModel):
+    """Response model for test workflow execution."""
+    success: bool
+    terraform_code: str
+    validation_error: str | None
+    security_errors: list[str]
+    retry_count: int
+    is_clean: bool
+
+
+@app.post(
+    "/test/generate",
+    response_model=TestGenerateResponse,
+    summary="Test Workflow Execution",
+    description="Test endpoint to manually trigger the LangGraph workflow for development and debugging",
+    tags=["Testing"]
+)
+async def test_generate(request: TestGenerateRequest) -> TestGenerateResponse:
+    """
+    Test endpoint for manually executing the infrastructure generation workflow.
+    
+    This endpoint is designed for Phase 1.2 testing and debugging. It allows
+    you to test the complete LangGraph workflow without setting up the full
+    API infrastructure.
+    
+    **WARNING**: This endpoint requires a valid OPENAI_API_KEY in your environment.
+    
+    Args:
+        request (TestGenerateRequest): Contains the user's infrastructure prompt
+    
+    Returns:
+        TestGenerateResponse: Complete workflow state including generated code
+            and any errors encountered
+    
+    Example Request:
+        ```bash
+        curl -X POST http://localhost:8000/test/generate \
+          -H "Content-Type: application/json" \
+          -d '{"prompt": "Create a secure S3 bucket"}'
+        ```
+    
+    Example Response:
+        ```json
+        {
+            "success": true,
+            "terraform_code": "provider \"aws\" {...}",
+            "validation_error": null,
+            "security_errors": [],
+            "retry_count": 1,
+            "is_clean": true
+        }
+        ```
+    
+    Note:
+        - This endpoint may take 30-60 seconds to complete
+        - Multiple retries may occur if validation or security checks fail
+        - The workflow will automatically attempt to fix errors up to 3 times
+    """
+    logger.info(f"Test generation request received: {request.prompt[:50]}...")
+    
+    try:
+        # Import here to avoid startup errors if dependencies not installed
+        from app.core.graph import run_workflow
+        
+        # Execute the workflow
+        logger.info("Starting workflow execution...")
+        result = run_workflow(request.prompt)
+        
+        # Format response
+        response = TestGenerateResponse(
+            success=result["is_clean"],
+            terraform_code=result["terraform_code"],
+            validation_error=result.get("validation_error"),
+            security_errors=result.get("security_errors", []),
+            retry_count=result["retry_count"],
+            is_clean=result["is_clean"]
+        )
+        
+        logger.info(f"Workflow completed. Success: {response.success}")
+        return response
+    
+    except ImportError as e:
+        logger.error(f"Failed to import workflow: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Workflow system not available. Missing dependencies: {str(e)}"
+        )
+    
+    except Exception as e:
+        logger.error(f"Workflow execution failed: {str(e)}")
+        logger.exception("Full traceback:")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Workflow execution error: {str(e)}"
+        )
 
 
 # Startup event

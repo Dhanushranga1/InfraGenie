@@ -12,6 +12,7 @@ python-dotenv==1.0.1
 
 # AI & LangChain Stack
 langchain==0.1.4
+langchain-core==0.1.16
 langchain-openai==0.0.5
 langgraph==0.0.20
 openai==1.10.0
