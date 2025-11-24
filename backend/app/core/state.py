@@ -46,6 +46,12 @@ class AgentState(TypedDict):
         is_clean (bool): Flag indicating whether the code has passed all
             validation and security checks. When True, the workflow proceeds
             to cost estimation and artifact generation. Default: False.
+            
+        cost_estimate (str): Monthly cost estimate from Infracost in formatted
+            string. Example: "$24.50/mo". Empty string if not yet calculated.
+            
+        ansible_playbook (str): Generated Ansible YAML configuration for server
+            setup and the "Cost Assassin" cron job. Empty string initially.
     
     Lifecycle:
         1. Initialize with user_prompt
@@ -54,6 +60,8 @@ class AgentState(TypedDict):
         4. Security sets security_errors if vulnerabilities detected
         5. Architect fixes errors, increments retry_count
         6. Loop until is_clean=True or retry_count exceeds limit
+        7. FinOps calculates cost_estimate
+        8. Config agent generates ansible_playbook
     
     Example:
         ```python
@@ -63,7 +71,9 @@ class AgentState(TypedDict):
             "validation_error": None,
             "security_errors": [],
             "retry_count": 0,
-            "is_clean": False
+            "is_clean": False,
+            "cost_estimate": "",
+            "ansible_playbook": ""
         }
         ```
     """
@@ -73,3 +83,5 @@ class AgentState(TypedDict):
     security_errors: List[str]
     retry_count: int
     is_clean: bool
+    cost_estimate: str
+    ansible_playbook: str

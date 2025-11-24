@@ -29,7 +29,9 @@ from langgraph.graph import StateGraph, END
 
 from app.core.state import AgentState
 from app.core.agents.architect import architect_node
+from app.core.agents.config import config_node
 from app.services.sandbox import validate_terraform, run_checkov
+from app.services.finops import get_cost_estimate
 
 logger = logging.getLogger(__name__)
 
@@ -224,29 +226,29 @@ def route_after_validator(
 
 def route_after_security(
     state: AgentState
-) -> Literal["architect", "end"]:
+) -> Literal["architect", "finops"]:
     """
     Conditional edge function that routes flow after security scanning.
     
-    This function determines whether to proceed to completion or loop back
+    This function determines whether to proceed to FinOps or loop back
     for security remediation based on scan results and retry count.
     
     Args:
         state (AgentState): Current state with security scan results
     
     Returns:
-        Literal["architect", "end"]: Next node to execute
+        Literal["architect", "finops"]: Next node to execute
     
     Routing Logic:
-        1. If is_clean=True → Go to "end" (success)
+        1. If is_clean=True → Go to "finops" (continue to cost estimation)
         2. If security_errors AND retry_count < MAX_RETRIES → Go to "architect"
-        3. If security_errors AND retry_count >= MAX_RETRIES → Go to "end" (fail)
+        3. If security_errors AND retry_count >= MAX_RETRIES → Go to "finops" (proceed anyway)
     
     Example:
         ```python
-        # Clean: workflow complete
+        # Clean: proceed to finops
         state = {"is_clean": True, "security_errors": []}
-        route_after_security(state)  # → "end"
+        route_after_security(state)  # → "finops"
         
         # Violations: retry with architect
         state = {
@@ -256,13 +258,13 @@ def route_after_security(
         }
         route_after_security(state)  # → "architect"
         
-        # Violations: max retries exceeded
+        # Violations: max retries exceeded, proceed anyway
         state = {
             "is_clean": False,
             "security_errors": ["CKV_AWS_8"],
             "retry_count": 3
         }
-        route_after_security(state)  # → "end"
+        route_after_security(state)  # → "finops"
         ```
     """
     is_clean = state.get("is_clean", False)
@@ -270,9 +272,9 @@ def route_after_security(
     retry_count = state.get("retry_count", 0)
     
     if is_clean:
-        # All checks passed - workflow complete
-        logger.info("✓ Workflow complete - code is clean and validated")
-        return "end"
+        # All checks passed - proceed to cost estimation
+        logger.info("✓ Security validation complete - proceeding to FinOps")
+        return "finops"
     
     if security_errors and retry_count < MAX_RETRIES:
         # Security violations found but retries available
@@ -282,12 +284,53 @@ def route_after_security(
         )
         return "architect"
     
-    # Max retries exceeded - end workflow with violations
-    logger.error(
-        f"✗ Max retries ({MAX_RETRIES}) exceeded. "
-        f"Security violations remain: {security_errors}"
+    # Max retries exceeded - proceed to finops anyway (user can decide)
+    logger.warning(
+        f"⚠ Max retries ({MAX_RETRIES}) exceeded. "
     )
-    return "end"
+    logger.info("→ Proceeding to FinOps despite security issues")
+    return "finops"
+
+
+def finops_node(state: AgentState) -> Dict[str, Any]:
+    """
+    LangGraph node that estimates infrastructure costs using Infracost.
+    
+    This node calls the FinOps service to calculate monthly cost estimates
+    for the validated Terraform code. It's a deterministic tool node.
+    
+    Args:
+        state (AgentState): Current workflow state with terraform_code
+    
+    Returns:
+        Dict[str, Any]: Updated state with cost_estimate field
+    
+    Example:
+        ```python
+        state = {"terraform_code": "resource \"aws_instance\" {...}"}
+        result = finops_node(state)
+        # result = {"cost_estimate": "$24.50/mo"}
+        ```
+    """
+    logger.info("=" * 60)
+    logger.info("FINOPS NODE: Calculating cost estimate")
+    
+    terraform_code = state.get("terraform_code", "")
+    
+    if not terraform_code:
+        logger.warning("No Terraform code for cost estimation")
+        return {
+            "cost_estimate": "Unable to estimate (no code)"
+        }
+    
+    # Call FinOps service
+    cost = get_cost_estimate(terraform_code)
+    
+    logger.info(f"✓ Cost estimate: {cost}")
+    
+    return {
+        "cost_estimate": cost
+    }
 
 
 def create_workflow() -> StateGraph:
@@ -362,6 +405,8 @@ def create_workflow() -> StateGraph:
     workflow.add_node("architect", architect_node)
     workflow.add_node("validator", validator_node)
     workflow.add_node("security", security_node)
+    workflow.add_node("finops", finops_node)
+    workflow.add_node("config", config_node)
     
     # Set entry point
     workflow.set_entry_point("architect")
@@ -387,9 +432,15 @@ def create_workflow() -> StateGraph:
         route_after_security,
         {
             "architect": "architect",  # Fix security issues
-            "end": END                 # Success or fail
+            "finops": "finops"         # Continue to cost estimation
         }
     )
+    
+    # finops → config (always)
+    workflow.add_edge("finops", "config")
+    
+    # config → END (always - workflow complete)
+    workflow.add_edge("config", END)
     
     # Compile the graph
     app = workflow.compile()
@@ -453,7 +504,9 @@ def run_workflow(user_prompt: str) -> AgentState:
         "validation_error": None,
         "security_errors": [],
         "retry_count": 0,
-        "is_clean": False
+        "is_clean": False,
+        "cost_estimate": "",
+        "ansible_playbook": ""
     }
     
     try:

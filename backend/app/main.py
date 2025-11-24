@@ -37,6 +37,10 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+# Include API routes
+from app.api.routes import router
+app.include_router(router)
+
 
 def check_tool_version(command: list[str], tool_name: str) -> Dict[str, Any]:
     """
