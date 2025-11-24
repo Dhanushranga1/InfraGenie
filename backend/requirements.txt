@@ -1,0 +1,26 @@
+# FastAPI Core Dependencies
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# File Handling
+python-multipart==0.0.6
+
+# Environment Configuration
+python-dotenv==1.0.1
+
+# AI & LangChain Stack
+langchain==0.1.4
+langchain-openai==0.0.5
+langgraph==0.0.20
+openai==1.10.0
+
+# DevOps Tools (Python-based)
+checkov==3.2.1
+ansible==9.1.0
+ansible-core==2.16.2
+
+# Utilities
+httpx==0.26.0
+aiofiles==23.2.1
