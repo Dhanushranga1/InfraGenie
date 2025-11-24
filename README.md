@@ -285,13 +285,25 @@ Backend follows PEP 8 guidelines. Frontend uses ESLint configuration based on Ne
 - Check CORS configuration in `backend/app/main.py`
 - Ensure no firewall blocking port 8000
 
+### Workflow reports success: false despite generating code
+- This has been fixed in the latest version
+- The system now marks workflows as successful when all artifacts are generated
+- Security warnings are included but do not prevent artifact delivery
+- Restart backend server to apply the fix
+
 ## Contributing
 
-This is a private project. For questions or issues, contact the development team.
+Contributions are welcome. Please follow these guidelines:
+
+1. Fork the repository
+2. Create a feature branch with a descriptive name
+3. Make your changes with clear commit messages
+4. Test your changes thoroughly
+5. Submit a pull request with detailed description of changes
 
 ## License
 
-Proprietary - All rights reserved.
+MIT License - See LICENSE file for details.
 
 ## Acknowledgments
 
