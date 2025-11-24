@@ -23,8 +23,8 @@ Before running this application, ensure you have:
    ```
 
 2. **API Keys** (Required for full functionality)
-   - OpenAI API Key (for GPT-4 LLM operations)
-   - Infracost API Key (optional, for cost estimation)
+   - Groq API Key (for LLM operations via Groq Cloud)
+   - Infracost API Key (for cost estimation)
    - AWS Credentials (optional, for actual deployments)
 
 ## 🚀 Quick Start

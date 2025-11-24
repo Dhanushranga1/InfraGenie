@@ -10,8 +10,9 @@ Ansible configurations that complement the provisioned infrastructure.
 """
 
 import logging
+import os
 from typing import Dict, Any
-from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -128,20 +129,16 @@ def create_config_chain():
         Runnable: A LangChain chain for Ansible playbook generation
     
     Configuration:
-        - Model: gpt-4o (GPT-4 Optimized)
+        - Model: llama-3.3-70b-versatile (via Groq Cloud)
         - Temperature: 0.2 (slightly higher for creative config)
         - Max tokens: 2000 (sufficient for playbooks)
     """
-    # Initialize the LLM
-    llm = ChatOpenAI(
-        model="gpt-4o",
+    # Initialize the LLM via Groq Cloud
+    llm = ChatGroq(
+        model="llama-3.3-70b-versatile",
         temperature=0.2,  # Slightly higher for configuration creativity
         max_tokens=2000,
-        model_kwargs={
-            "top_p": 0.95,
-            "frequency_penalty": 0.0,
-            "presence_penalty": 0.0
-        }
+        groq_api_key=os.getenv("GROQ_API_KEY")
     )
     
     # Create the prompt template

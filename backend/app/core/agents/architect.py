@@ -16,8 +16,9 @@ Design Philosophy:
 """
 
 import logging
+import os
 from typing import Dict, Any
-from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -106,20 +107,17 @@ def create_architect_chain():
         Runnable: A LangChain chain that can be invoked with state parameters
     
     Configuration:
-        - Model: gpt-4o (GPT-4 Optimized)
+    Configuration:
+        - Model: llama-3.3-70b-versatile (via Groq Cloud)
         - Temperature: 0.1 (low randomness for consistent code generation)
         - Max tokens: 2000 (sufficient for most infrastructure definitions)
     """
-    # Initialize the LLM
-    llm = ChatOpenAI(
-        model="gpt-4o",
+    # Initialize the LLM via Groq Cloud
+    llm = ChatGroq(
+        model="llama-3.3-70b-versatile",
         temperature=0.1,  # Low temperature for deterministic code generation
         max_tokens=2000,
-        model_kwargs={
-            "top_p": 0.95,
-            "frequency_penalty": 0.0,
-            "presence_penalty": 0.0
-        }
+        groq_api_key=os.getenv("GROQ_API_KEY")
     )
     
     # Create the prompt template

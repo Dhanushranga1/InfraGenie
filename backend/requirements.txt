@@ -14,8 +14,10 @@ python-dotenv==1.0.1
 langchain==0.1.4
 langchain-core==0.1.16
 langchain-openai==0.0.5
+langchain-groq==0.0.1
 langgraph==0.0.20
 openai==1.10.0
+groq==0.4.2
 
 # DevOps Tools (Python-based)
 checkov==3.2.1
