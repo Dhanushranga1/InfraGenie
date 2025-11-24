@@ -406,7 +406,7 @@ def create_workflow() -> StateGraph:
     workflow.add_node("validator", validator_node)
     workflow.add_node("security", security_node)
     workflow.add_node("finops", finops_node)
-    workflow.add_node("config", config_node)
+    workflow.add_node("ansible", config_node)
     
     # Set entry point
     workflow.set_entry_point("architect")
@@ -436,11 +436,11 @@ def create_workflow() -> StateGraph:
         }
     )
     
-    # finops → config (always)
-    workflow.add_edge("finops", "config")
+    # finops → ansible (always)
+    workflow.add_edge("finops", "ansible")
     
-    # config → END (always - workflow complete)
-    workflow.add_edge("config", END)
+    # ansible → END (always - workflow complete)
+    workflow.add_edge("ansible", END)
     
     # Compile the graph
     app = workflow.compile()

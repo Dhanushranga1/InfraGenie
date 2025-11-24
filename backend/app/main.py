@@ -17,9 +17,14 @@ This validates that the "DevOps Toolbox" container is correctly configured.
 import subprocess
 from typing import Dict, Any
 from fastapi import FastAPI, HTTPException, Body
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -35,6 +40,20 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
+)
+
+# Configure CORS for frontend communication
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",  # Next.js dev server
+        "http://localhost:3001",  # Alternative port
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allow all headers
 )
 
 # Include API routes
