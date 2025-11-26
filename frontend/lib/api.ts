@@ -6,9 +6,12 @@
 
 import axios from 'axios';
 
+// Get API base URL from environment variable, fallback to localhost for development
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1';
+
 // Create Axios instance with base configuration
 export const api = axios.create({
-  baseURL: 'http://localhost:8000/api/v1',
+  baseURL: API_BASE_URL,
   timeout: 300000, // 5 minutes for LLM operations with retries (terraform init, checkov scans)
   headers: {
     'Content-Type': 'application/json',
