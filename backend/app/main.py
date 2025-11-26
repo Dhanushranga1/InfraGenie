@@ -50,6 +50,8 @@ app.add_middleware(
         "http://localhost:3001",  # Alternative port
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
+        "https://infra-genie.vercel.app",  # Production frontend
+        "https://infra-genie-git-main-dhanushranga1s-projects.vercel.app",  # Vercel preview
     ],
     allow_credentials=True,
     allow_methods=["*"],  # Allow all HTTP methods (GET, POST, etc.)
