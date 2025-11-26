@@ -61,7 +61,7 @@ from app.api.routes import router
 app.include_router(router)
 
 
-def check_tool_version(command: list[str], tool_name: str) -> Dict[str, Any]:
+def     check_tool_version(command: list[str], tool_name: str) -> Dict[str, Any]:
     """
     Execute a CLI tool version check command and capture its output.
 
@@ -242,7 +242,7 @@ async def health_check() -> JSONResponse:
     for tool_key, tool_info in tools_to_check.items():
         tool_status = check_tool_version(
             command=tool_info["command"],
-            name=tool_info["name"]
+            tool_name=tool_info["name"]
         )
         tools_status[tool_key] = tool_status
         
