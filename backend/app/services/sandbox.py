@@ -194,11 +194,13 @@ def validate_terraform(hcl_code: str) -> Optional[str]:
             return error_msg
         
         # Validate configuration
-        logger.info("Running terraform validate...")
+        # Allow validate timeout to be configured via environment variable
+        tf_validate_timeout = int(os.getenv("TF_VALIDATE_TIMEOUT", "120"))
+        logger.info(f"Running terraform validate (timeout={tf_validate_timeout}s)...")
         validate_result = run_tool(
             directory=temp_dir,
             command=["terraform", "validate", "-json"],
-            timeout=30
+            timeout=tf_validate_timeout
         )
         
         # Parse JSON output
