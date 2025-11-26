@@ -7,6 +7,8 @@
 import { create } from 'zustand';
 
 interface ProjectState {
+  selectedNodeId: string | null;
+  setSelectedNode: (id: string | null) => void;
   // Loading state
   isLoading: boolean;
   
@@ -15,6 +17,7 @@ interface ProjectState {
   ansiblePlaybook: string | null;
   costEstimate: string | null;
   securityRisks: string[];
+  graphData: any;
   
   // Chat history
   messages: Array<{
@@ -27,10 +30,11 @@ interface ProjectState {
   // Actions
   setLoading: (loading: boolean) => void;
   setProjectData: (data: {
-    terraformCode?: string;
-    ansiblePlaybook?: string;
-    costEstimate?: string;
-    securityRisks?: string[];
+  terraformCode?: string;
+  ansiblePlaybook?: string;
+  costEstimate?: string;
+  securityRisks?: string[];
+  graphData?: any;
   }) => void;
   addMessage: (role: 'user' | 'ai', content: string) => void;
   clearProject: () => void;
@@ -43,16 +47,20 @@ export const useProjectStore = create<ProjectState>((set) => ({
   ansiblePlaybook: null,
   costEstimate: null,
   securityRisks: [],
+  graphData: null,
+  selectedNodeId: null,
   messages: [],
   
   // Actions
   setLoading: (loading) => set({ isLoading: loading }),
+  setSelectedNode: (id) => set({ selectedNodeId: id }),
   
   setProjectData: (data) => set((state) => ({
-    terraformCode: data.terraformCode ?? state.terraformCode,
-    ansiblePlaybook: data.ansiblePlaybook ?? state.ansiblePlaybook,
-    costEstimate: data.costEstimate ?? state.costEstimate,
-    securityRisks: data.securityRisks ?? state.securityRisks,
+  terraformCode: data.terraformCode ?? state.terraformCode,
+  ansiblePlaybook: data.ansiblePlaybook ?? state.ansiblePlaybook,
+  costEstimate: data.costEstimate ?? state.costEstimate,
+  securityRisks: data.securityRisks ?? state.securityRisks,
+  graphData: data.graphData ?? state.graphData,
   })),
   
   addMessage: (role, content) => set((state) => ({

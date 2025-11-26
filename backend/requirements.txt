@@ -28,3 +28,6 @@ ansible-core==2.16.2
 # Utilities
 httpx==0.26.0
 aiofiles==23.2.1
+
+# HCL Parsing for Terraform
+python-hcl2

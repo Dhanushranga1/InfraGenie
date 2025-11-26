@@ -17,6 +17,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.core.state import AgentState
+from app.core.utils import clean_llm_output
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,19 @@ Your job is to generate **valid, production-ready Ansible playbook YAML** based 
    - Define handlers for service restarts
    - Use proper Ansible best practices
 
-7. **Context Awareness:**
+7. **Operating System Assumption (DEFAULT TO UBUNTU):**
+   - ALWAYS assume Ubuntu 22.04 LTS (Debian-based) unless explicitly told otherwise
+   - Use `ansible.builtin.apt` module for ALL package management
+   - Use `ufw` for firewall configuration (not firewalld)
+   - Package names:
+     * Docker: `docker.io` (NOT `docker-ce`)
+     * Web server: `nginx` or `apache2`
+     * Python: `python3`, `python3-pip`
+   - Service names: Use systemd (e.g., `docker`, `nginx`, `ssh`)
+   - Paths: `/etc/systemd/system/`, `/var/www/html/`, `/home/ubuntu/`
+   - Default user: `ubuntu` (NOT `ec2-user` or `admin`)
+
+8. **Context Awareness:**
    - Analyze the Terraform code to understand infrastructure type
    - If EC2/VM: include server setup tasks
    - If RDS/Database: include database client tools
@@ -242,18 +255,8 @@ def config_node(state: AgentState) -> Dict[str, Any]:
         logger.info("Invoking GPT-4 for Ansible playbook generation...")
         response = chain.invoke({"user_input": user_input})
         
-        # Extract generated playbook
-        playbook_yaml = response.content.strip()
-        
-        # Clean up output (remove markdown fencing if present)
-        if playbook_yaml.startswith("```"):
-            lines = playbook_yaml.split("\n")
-            # Remove first line (```yaml or ```)
-            lines = lines[1:]
-            # Remove last line if it's ```
-            if lines and lines[-1].strip() == "```":
-                lines = lines[:-1]
-            playbook_yaml = "\n".join(lines).strip()
+        # Extract and clean generated playbook
+        playbook_yaml = clean_llm_output(response.content, "yaml")
         
         # Ensure it starts with YAML document marker
         if not playbook_yaml.startswith("---"):
@@ -272,13 +275,25 @@ def config_node(state: AgentState) -> Dict[str, Any]:
             logger.info("✓ Security hardening (fail2ban) included")
         else:
             logger.warning("⚠ fail2ban security may be missing")
-        
-        # Return updated state
-        # Mark workflow as complete/successful since we reached the final node
-        # Even if there are security warnings, we have valid generated artifacts
+
+        # Build log entries for observability
+        logs = state.get("logs", [])
+        logs = logs + ["✅ Ansible playbook generated"]
+        if "Cost Assassin" in playbook_yaml or "shutdown" in playbook_yaml:
+            logs.append("✅ Cost Assassin cron job included")
+        else:
+            logs.append("⚠ Cost Assassin cron job may be missing")
+
+        if "fail2ban" in playbook_yaml:
+            logs.append("✅ fail2ban included for security hardening")
+        else:
+            logs.append("⚠ fail2ban may be missing from playbook")
+
+        # Return updated state including logs for frontend streaming
         return {
             "ansible_playbook": playbook_yaml,
-            "is_clean": True
+            "is_clean": True,
+            "logs": logs
         }
     
     except Exception as e:
@@ -306,9 +321,11 @@ def config_node(state: AgentState) -> Dict[str, Any]:
         user: root
 """
         
-        logger.warning("Using fallback minimal playbook")
+    logger.warning("Using fallback minimal playbook")
         
-        return {
-            "ansible_playbook": fallback_playbook,
-            "is_clean": True
-        }
+    logs = state.get("logs", []) + [f"❌ Config Agent error: {str(e)}", "⚠ Using fallback playbook"]
+    return {
+      "ansible_playbook": fallback_playbook,
+      "is_clean": True,
+      "logs": logs
+    }

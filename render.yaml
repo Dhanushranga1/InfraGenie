@@ -1,0 +1,35 @@
+# ============================================
+# Render.com Backend Configuration
+# ============================================
+# Deploy Backend: https://render.com/
+#
+# Instructions:
+# 1. Create a new "Web Service" on Render
+# 2. Connect your GitHub repository
+# 3. Configure:
+#    - Name: infragenie-backend
+#    - Root Directory: backend
+#    - Environment: Python 3.11
+#    - Build Command: pip install -r requirements.txt
+#    - Start Command: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+# 4. Add Environment Variables (see below)
+# 5. Deploy!
+
+services:
+  - type: web
+    name: infragenie-backend
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: ENVIRONMENT
+        value: production
+      - key: CORS_ORIGINS
+        value: https://your-frontend.vercel.app

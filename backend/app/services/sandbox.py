@@ -252,80 +252,31 @@ def validate_terraform(hcl_code: str) -> Optional[str]:
                 logger.warning(f"Failed to cleanup {temp_dir}: {str(e)}")
 
 
-def run_checkov(hcl_code: str) -> List[str]:
+def run_checkov(hcl_code: str) -> List[Dict[str, str]]:
     """
     Scan Terraform code for security and compliance violations using Checkov.
-    
-    Checkov is a static analysis tool that checks infrastructure-as-code against
-    hundreds of security policies (CIS benchmarks, PCI-DSS, HIPAA, etc.). This
-    function identifies which specific policies are violated and returns their
-    IDs for targeted remediation.
-    
-    Policy Categories Checked:
-        - Encryption (at-rest, in-transit)
-        - IAM permissions and least privilege
-        - Network security (open ports, public access)
-        - Logging and monitoring
-        - Backup and disaster recovery
+    Returns detailed violation information for intelligent remediation.
     
     Args:
-        hcl_code (str): Terraform HCL code to scan. Should be syntactically
-            valid (run validate_terraform first). Example code with violations:
-            ```hcl
-            resource "aws_security_group" "web" {
-              ingress {
-                from_port   = 0
-                to_port     = 65535
-                protocol    = "tcp"
-                cidr_blocks = ["0.0.0.0/0"]  # CKV_AWS_23: Too permissive
-              }
-            }
-            ```
+        hcl_code (str): Terraform HCL code to scan
     
     Returns:
-        List[str]: List of failed Checkov check IDs. Empty list if all checks
-            passed. Example: ['CKV_AWS_8', 'CKV_AWS_23', 'CKV_AWS_46']
-            
-            Common Check IDs:
-            - CKV_AWS_8: Ensure EBS volumes are encrypted
-            - CKV_AWS_23: Security group has unrestricted ingress
-            - CKV_AWS_46: EC2 instance has detailed monitoring enabled
-            - CKV_AWS_130: VPC has flow logs enabled
-    
-    Raises:
-        subprocess.TimeoutExpired: If Checkov scan takes too long
-        Exception: For unexpected errors during execution
+        List[Dict[str, str]]: List of detailed violation dictionaries:
+        [
+            {
+                "check_id": "CKV_AWS_24",
+                "check_name": "Ensure no security groups allow ingress from 0.0.0.0:0 to port 22",
+                "resource": "aws_security_group.allow_ssh",
+                "file_path": "main.tf",
+                "severity": "HIGH",
+                "guideline": "https://docs.bridgecrew.io/docs/...",
+            }
+        ]
     
     Example:
-        ```python
-        code = '''
-        resource "aws_s3_bucket" "data" {
-          bucket = "my-data-bucket"
-          # Missing: encryption, versioning, logging
-        }
-        '''
-        
         violations = run_checkov(code)
-        if violations:
-            print(f"Security issues found: {violations}")
-            # violations = ['CKV_AWS_18', 'CKV_AWS_19', 'CKV_AWS_21']
-            # Send to Architect Agent with instructions to fix
-        else:
-            print("Security scan passed!")
-        ```
-    
-    Implementation Notes:
-        - Uses temporary isolated directory (thread-safe)
-        - Runs with --quiet flag to suppress progress output
-        - Parses JSON output to extract check IDs
-        - Filters only FAILED checks (skipped checks are ignored)
-        - Returns sorted list for deterministic output
-        - Automatically cleans up temporary files
-    
-    Performance:
-        - Typical scan time: 2-5 seconds
-        - Timeout set to 60 seconds to handle large codebases
-        - No network calls (pure static analysis)
+        for v in violations:
+            print(f"{v['check_id']} on {v['resource']}: {v['check_name']}")
     """
     temp_dir = None
     
@@ -337,7 +288,6 @@ def run_checkov(hcl_code: str) -> List[str]:
         # Write HCL code to main.tf
         main_tf_path = Path(temp_dir) / "main.tf"
         main_tf_path.write_text(hcl_code, encoding="utf-8")
-        logger.debug(f"Wrote {len(hcl_code)} bytes for Checkov scan")
         
         # Run Checkov with JSON output
         logger.info("Running Checkov security scan...")
@@ -347,66 +297,58 @@ def run_checkov(hcl_code: str) -> List[str]:
                 "checkov",
                 "-f", "main.tf",
                 "--output", "json",
-                "--quiet",  # Suppress progress bars
-                "--compact"  # Minimize output size
+                "--quiet",
+                "--compact"
             ],
             timeout=60
         )
-        
-        # Checkov returns non-zero exit code when violations are found
-        # This is expected behavior, not an error
-        logger.debug(f"Checkov scan completed with exit code {checkov_result.returncode}")
         
         # Parse JSON output
         try:
             checkov_output = json.loads(checkov_result.stdout)
         except json.JSONDecodeError:
             logger.error("Failed to parse Checkov JSON output")
-            logger.debug(f"Raw output: {checkov_result.stdout[:500]}")
-            return []  # Return empty list on parse failure
+            return []
         
-        # Extract failed check IDs
-        failed_check_ids: List[str] = []
+        # Extract detailed violation information
+        violations: List[Dict[str, str]] = []
         
-        # Checkov output structure: results -> failed_checks (list)
         results = checkov_output.get("results", {})
         failed_checks = results.get("failed_checks", [])
         
         for check in failed_checks:
-            check_id = check.get("check_id")
-            if check_id:
-                failed_check_ids.append(check_id)
-                
-                # Log check details for debugging
-                check_name = check.get("check_name", "Unknown")
-                resource = check.get("resource", "Unknown")
-                logger.info(
-                    f"Failed check: {check_id} - {check_name} "
-                    f"on resource {resource}"
-                )
-        
-        # Remove duplicates and sort for consistency
-        unique_failures = sorted(set(failed_check_ids))
-        
-        if unique_failures:
-            logger.warning(
-                f"Checkov found {len(unique_failures)} unique violations: "
-                f"{', '.join(unique_failures)}"
+            violation = {
+                "check_id": check.get("check_id", "UNKNOWN"),
+                "check_name": check.get("check_name", "Unknown security check"),
+                "resource": check.get("resource", "Unknown resource"),
+                "file_path": check.get("file_path", "main.tf"),
+                "severity": check.get("check_result", {}).get("result", "MEDIUM"),
+                "guideline": check.get("guideline", ""),
+                "description": check.get("description", ""),
+            }
+            violations.append(violation)
+            
+            # Log detailed information
+            logger.info(
+                f"Security violation: [{violation['check_id']}] "
+                f"{violation['check_name']} on {violation['resource']}"
             )
-        else:
-            logger.info("Checkov scan passed: No security violations found")
         
-        return unique_failures
+        if violations:
+            logger.warning(f"Checkov found {len(violations)} security violations")
+        else:
+            logger.info("✓ Checkov scan passed: No security violations found")
+        
+        return violations
     
     except Exception as e:
         logger.error(f"Unexpected error during Checkov scan: {str(e)}")
-        return []  # Return empty list rather than failing the workflow
+        return []
     
     finally:
-        # Cleanup: Remove temporary directory
+        # Cleanup
         if temp_dir and os.path.exists(temp_dir):
             try:
                 shutil.rmtree(temp_dir)
-                logger.debug(f"Cleaned up temporary directory: {temp_dir}")
             except Exception as e:
                 logger.warning(f"Failed to cleanup {temp_dir}: {str(e)}")

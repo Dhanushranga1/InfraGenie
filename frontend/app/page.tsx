@@ -4,6 +4,7 @@ import { Navbar } from '@/components/navbar';
 import { ChatInterface } from '@/components/chat/chat-interface';
 import { ArchitectureDiagram } from '@/components/diagram/architecture-diagram';
 import { StatusBadges } from '@/components/dashboard/status-badges';
+import { SecurityPanel } from '@/components/dashboard/security-panel';
 import { DownloadButton } from '@/components/dashboard/download-button';
 
 export default function HomePage() {
@@ -35,7 +36,7 @@ export default function HomePage() {
         </div>
 
         {/* Right Panel - Architecture Diagram */}
-        <div className="flex-1 bg-zinc-950 relative overflow-hidden">
+        <div className="flex-1 bg-zinc-950 relative overflow-hidden flex flex-col">
           {/* Cyberpunk glow effects */}
           <div className="absolute top-0 right-0 w-96 h-96 bg-violet-500/10 rounded-full blur-3xl pointer-events-none z-0" />
           <div className="absolute bottom-0 left-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none z-0" />
@@ -44,12 +45,20 @@ export default function HomePage() {
           <StatusBadges />
 
           {/* Architecture Diagram Canvas */}
-          <div className="relative z-10 h-[calc(100%-2.5rem)]">
-            <ArchitectureDiagram />
+          <div className="relative z-10 flex-1 flex flex-col">
+            {/* Diagram */}
+            <div className="flex-1">
+              <ArchitectureDiagram />
+            </div>
+
+            {/* Security Panel */}
+            <div className="p-4 border-t border-zinc-800 bg-zinc-900/80 backdrop-blur-xl">
+              <SecurityPanel />
+            </div>
           </div>
 
           {/* Status bar at bottom */}
-          <div className="absolute bottom-0 left-0 right-0 h-10 border-t border-zinc-800 bg-zinc-900/80 backdrop-blur-xl flex items-center justify-between px-6">
+          <div className="h-10 border-t border-zinc-800 bg-zinc-900/80 backdrop-blur-xl flex items-center justify-between px-6 relative z-10">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />

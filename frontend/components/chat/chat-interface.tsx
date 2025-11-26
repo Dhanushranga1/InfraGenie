@@ -44,6 +44,7 @@ export function ChatInterface() {
         ansiblePlaybook: data.ansible_playbook,
         costEstimate: data.cost_estimate,
         securityRisks: data.security_errors,
+        graphData: data.graph_data,
       });
       
       // Add AI response to chat

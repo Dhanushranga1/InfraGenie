@@ -1,0 +1,90 @@
+# ============================================
+# InfraGenie - Root .gitignore
+# ============================================
+
+# Environment Variables (CRITICAL - Contains API Keys)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+**/.env
+**/.env.local
+
+# API Keys & Secrets
+*.pem
+*.key
+*_key.pem
+infragenie-key.pem
+groq_api_key.txt
+aws_credentials.txt
+secret_keys/
+secrets/
+
+# Python Backend
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/**/*.pyc
+backend/.pytest_cache/
+backend/venv/
+backend/env/
+backend/.venv/
+backend/*.egg-info/
+backend/dist/
+backend/build/
+
+# Frontend (Next.js)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/dist/
+frontend/.turbo/
+frontend/.vercel/
+
+# Generated Infrastructure Files (from testing)
+*.tfstate
+*.tfstate.backup
+*.tfvars
+.terraform/
+terraform.tfstate.d/
+deployment_kit_*/
+infragenie_deployment_*.zip
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+coverage/
+
+# Temporary Files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# OS Files
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Documentation (optional - uncomment if you don't want to commit these)
+# ARCHITECTURAL_IMPROVEMENTS.md
+# PRODUCTION_POLISH_COMPLETE.md

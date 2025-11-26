@@ -10,7 +10,7 @@ Design Pattern: TypedDict provides compile-time type checking while maintaining
 runtime flexibility for the LangGraph state machine.
 """
 
-from typing import TypedDict, Optional, List
+from typing import TypedDict, Optional, List, Dict, Any
 
 
 class AgentState(TypedDict):
@@ -22,36 +22,39 @@ class AgentState(TypedDict):
     agent invocations.
     
     Attributes:
-        user_prompt (str): The original high-level infrastructure request from
-            the user. Example: "Create a secure EC2 instance with SSH access"
+        user_prompt (str): The original high-level infrastructure request
+        
+        terraform_code (str): Current version of generated Terraform HCL code
             
-        terraform_code (str): The current version of generated Terraform HCL code.
-            This field is updated by the Architect Agent and validated by
-            downstream nodes. Initially empty.
+        validation_error (Optional[str]): Human-readable error from terraform validate
             
-        validation_error (Optional[str]): Human-readable error message from
-            `terraform validate`. If None, validation passed successfully.
-            Example: "Error: Missing required argument 'ami' in aws_instance.web"
+        security_errors (List[str]): Legacy list of Checkov check IDs (deprecated)
+        
+        security_violations (List[Dict[str, str]]): Detailed security violations:
+            [
+                {
+                    "check_id": "CKV_AWS_24",
+                    "check_name": "Ensure no security groups allow ingress...",
+                    "resource": "aws_security_group.allow_ssh",
+                    "file_path": "main.tf",
+                    "severity": "HIGH",
+                    "guideline": "https://...",
+                }
+            ]
             
-        security_errors (List[str]): List of Checkov check IDs that failed
-            security/compliance scans. Each ID represents a specific policy
-            violation that must be addressed.
-            Example: ['CKV_AWS_8', 'CKV_AWS_23'] for unencrypted EBS and
-            unrestricted security groups.
+        retry_count (int): Counter tracking fix attempts (max 3)
             
-        retry_count (int): Counter tracking how many times the Architect Agent
-            has attempted to fix errors. Used to prevent infinite loops in the
-            graph. Default: 0. Maximum: 3.
-            
-        is_clean (bool): Flag indicating whether the code has passed all
-            validation and security checks. When True, the workflow proceeds
-            to cost estimation and artifact generation. Default: False.
+        is_clean (bool): Flag indicating all checks passed
             
         cost_estimate (str): Monthly cost estimate from Infracost in formatted
             string. Example: "$24.50/mo". Empty string if not yet calculated.
             
         ansible_playbook (str): Generated Ansible YAML configuration for server
             setup and the "Cost Assassin" cron job. Empty string initially.
+        
+        logs (List[str]): Ordered list of workflow events for real-time observability.
+            Each node appends success/failure messages. Enables streaming progress to UI.
+            Example: ["✅ Terraform syntax validation passed", "❌ Security scan found 2 violations"]
     
     Lifecycle:
         1. Initialize with user_prompt
@@ -80,8 +83,11 @@ class AgentState(TypedDict):
     user_prompt: str
     terraform_code: str
     validation_error: Optional[str]
-    security_errors: List[str]
+    security_errors: List[str]  # Legacy: List of check IDs
+    security_violations: List[Dict[str, str]]  # Detailed violation info
     retry_count: int
     is_clean: bool
     cost_estimate: str
     ansible_playbook: str
+    graph_data: dict  # Structured graph representation of parsed HCL
+    logs: List[str]  # Real-time workflow event log

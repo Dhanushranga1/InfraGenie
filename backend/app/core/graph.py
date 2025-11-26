@@ -4,23 +4,6 @@ LangGraph Workflow Orchestration
 This module defines the stateful workflow graph that coordinates multiple agents
 and tools to generate validated, secure infrastructure-as-code. The graph
 implements a cyclic workflow with self-correction loops.
-
-Workflow Architecture:
-    User Prompt → Architect → Validator → Security → [Success/Retry]
-                      ↑           |            |
-                      └───────────┴────────────┘
-                         (Retry loop if errors)
-
-The graph uses conditional edges to route execution based on validation results,
-security scan outcomes, and retry limits. This enables autonomous error
-correction without human intervention.
-
-Key Features:
-- Automatic retry with exponential backoff
-- Maximum retry limit to prevent infinite loops
-- Structured state management via TypedDict
-- Comprehensive logging for debugging
-- Clean separation between LLM and tool nodes
 """
 
 import logging
@@ -32,6 +15,8 @@ from app.core.agents.architect import architect_node
 from app.core.agents.config import config_node
 from app.services.sandbox import validate_terraform, run_checkov
 from app.services.finops import get_cost_estimate
+# Assuming parser is available here or inside the function as originally written
+# from app.services.parser import parse_hcl_to_graph 
 
 logger = logging.getLogger(__name__)
 
@@ -42,172 +27,104 @@ MAX_RETRIES = 3
 def validator_node(state: AgentState) -> Dict[str, Any]:
     """
     LangGraph node that validates Terraform code syntax and configuration.
-    
-    This node executes `terraform validate` on the generated code and updates
-    the state based on the results. It does not call the LLM - it's a pure
-    deterministic tool node.
-    
-    Args:
-        state (AgentState): Current workflow state with terraform_code
-    
-    Returns:
-        Dict[str, Any]: Updated state fields:
-            - validation_error: Error message if validation failed, None otherwise
-    
-    Behavior:
-        1. Extract terraform_code from state
-        2. Call sandbox.validate_terraform()
-        3. If error returned, store in validation_error
-        4. If None returned, validation passed
-    
-    Example:
-        ```python
-        # Invalid code
-        state = {"terraform_code": "resource aws_instance {"}
-        result = validator_node(state)
-        # result = {"validation_error": "Error: Missing required argument..."}
-        
-        # Valid code
-        state = {"terraform_code": "provider \"aws\" {...}"}
-        result = validator_node(state)
-        # result = {"validation_error": None}
-        ```
+    executes `terraform validate` on the generated code.
     """
-    logger.info("=" * 60)
     logger.info("VALIDATOR NODE: Running Terraform validation")
-    
     terraform_code = state.get("terraform_code", "")
-    
+
     if not terraform_code:
-        logger.warning("No Terraform code to validate")
-        return {
-            "validation_error": "No Terraform code generated"
-        }
-    
-    # Run validation
+        return {"validation_error": "No Terraform code generated"}
+
+    # Run validation tool
     error = validate_terraform(terraform_code)
-    
+
     if error:
         logger.warning(f"Validation failed: {error[:100]}...")
         return {
-            "validation_error": error
+            "validation_error": error,
+            "logs": state.get("logs", []) + ["❌ Terraform validation failed: Syntax error detected"]
         }
     else:
         logger.info("✓ Validation passed successfully")
         return {
-            "validation_error": None
+            "validation_error": None,
+            "logs": state.get("logs", []) + ["✅ Terraform syntax validation passed"]
         }
+
+
+def parser_node(state: AgentState) -> Dict[str, Any]:
+    """
+    LangGraph node that parses Terraform HCL code into a structured graph for visualization.
+    """
+    hcl_code = state.get("terraform_code", "")
+    
+    # Import inside function to avoid potential circular imports if necessary
+    try:
+        from app.services.parser import parse_hcl_to_graph
+        graph_data = parse_hcl_to_graph(hcl_code) if hcl_code else {"nodes": [], "edges": []}
+    except ImportError as e:
+        logger.warning(f"Parser service import failed: {e}")
+        graph_data = {"nodes": [], "edges": []}
+    except Exception as e:
+        logger.error(f"Parser execution failed: {e}")
+        graph_data = {"nodes": [], "edges": []}
+        
+    return {"graph_data": graph_data}
 
 
 def security_node(state: AgentState) -> Dict[str, Any]:
     """
-    LangGraph node that scans Terraform code for security violations.
-    
-    This node executes Checkov security scanning on the validated code and
-    updates the state with any policy violations found. Like the validator,
-    this is a deterministic tool node.
-    
-    Args:
-        state (AgentState): Current workflow state with validated terraform_code
-    
-    Returns:
-        Dict[str, Any]: Updated state fields:
-            - security_errors: List of failed Checkov check IDs
-            - is_clean: True if no violations, False otherwise
-    
-    Behavior:
-        1. Extract terraform_code from state
-        2. Call sandbox.run_checkov()
-        3. Store list of failed check IDs
-        4. Set is_clean flag based on results
-    
-    Example:
-        ```python
-        # Code with security issues
-        state = {"terraform_code": "resource aws_s3_bucket {...}"}
-        result = security_node(state)
-        # result = {
-        #     "security_errors": ["CKV_AWS_18", "CKV_AWS_21"],
-        #     "is_clean": False
-        # }
-        
-        # Secure code
-        state = {"terraform_code": "resource aws_s3_bucket {...encrypted...}"}
-        result = security_node(state)
-        # result = {"security_errors": [], "is_clean": True}
-        ```
+    LangGraph node that runs security checks (Checkov) and returns detailed violations.
     """
-    logger.info("=" * 60)
-    logger.info("SECURITY NODE: Running Checkov security scan")
-    
+    logger.info("SECURITY NODE: Running security scan")
     terraform_code = state.get("terraform_code", "")
     
     if not terraform_code:
         logger.warning("No Terraform code to scan")
         return {
             "security_errors": [],
+            "security_violations": [],
             "is_clean": False
         }
     
-    # Run security scan
+    # Run Checkov and get detailed violations
     violations = run_checkov(terraform_code)
     
     if violations:
-        logger.warning(f"✗ Found {len(violations)} security violations")
+        logger.warning(f"Security checks failed: {len(violations)} violations found")
+        
+        # Extract IDs for backward compatibility
+        check_ids = [v["check_id"] for v in violations]
+        
+        # Log each violation
+        for v in violations:
+            logger.warning(
+                f"  → [{v['check_id']}] {v['check_name']} "
+                f"on {v['resource']}"
+            )
+        
         return {
-            "security_errors": violations,
-            "is_clean": False
+            "security_errors": check_ids,  # Legacy support
+            "security_violations": violations,  # Detailed info for remediation
+            "is_clean": False,
+            "logs": state.get("logs", []) + [f"❌ Security scan found {len(violations)} violation(s)"]
         }
     else:
         logger.info("✓ Security scan passed - no violations found")
         return {
             "security_errors": [],
-            "is_clean": True
+            "security_violations": [],
+            "is_clean": True,
+            "logs": state.get("logs", []) + ["✅ Security scan passed - no violations"]
         }
 
 
-def route_after_validator(
-    state: AgentState
-) -> Literal["architect", "security", "end"]:
+def route_after_validator(state: AgentState) -> Literal["architect", "end"]:
     """
-    Conditional edge function that routes flow after validation.
-    
-    This function determines the next node based on validation results and
-    retry count. It implements the core retry logic of the workflow.
-    
-    Args:
-        state (AgentState): Current state with validation results
-    
-    Returns:
-        Literal["architect", "security", "end"]: Next node to execute
-    
-    Routing Logic:
-        1. If validation passed → Go to "security" node
-        2. If validation failed AND retry_count < MAX_RETRIES → Go to "architect"
-        3. If validation failed AND retry_count >= MAX_RETRIES → Go to "end"
-    
-    Example:
-        ```python
-        # Pass: continue to security
-        state = {"validation_error": None, "retry_count": 1}
-        route_after_validator(state)  # → "security"
-        
-        # Fail: retry with architect
-        state = {"validation_error": "Missing argument", "retry_count": 1}
-        route_after_validator(state)  # → "architect"
-        
-        # Fail: max retries exceeded
-        state = {"validation_error": "Missing argument", "retry_count": 3}
-        route_after_validator(state)  # → "end"
-        ```
+    Conditional edge function that routes flow after validation FAILED.
+    (Success case is handled by the lambda in the graph definition).
     """
-    validation_error = state.get("validation_error")
     retry_count = state.get("retry_count", 0)
-    
-    if validation_error is None:
-        # Validation passed - proceed to security scan
-        logger.info("→ Routing to SECURITY node")
-        return "security"
     
     if retry_count < MAX_RETRIES:
         # Validation failed but retries available
@@ -224,93 +141,38 @@ def route_after_validator(
     return "end"
 
 
-def route_after_security(
-    state: AgentState
-) -> Literal["architect", "finops"]:
+def route_after_security(state: AgentState) -> Literal["architect", "parser"]:
     """
     Conditional edge function that routes flow after security scanning.
-    
-    This function determines whether to proceed to FinOps or loop back
-    for security remediation based on scan results and retry count.
-    
-    Args:
-        state (AgentState): Current state with security scan results
-    
-    Returns:
-        Literal["architect", "finops"]: Next node to execute
-    
-    Routing Logic:
-        1. If is_clean=True → Go to "finops" (continue to cost estimation)
-        2. If security_errors AND retry_count < MAX_RETRIES → Go to "architect"
-        3. If security_errors AND retry_count >= MAX_RETRIES → Go to "finops" (proceed anyway)
-    
-    Example:
-        ```python
-        # Clean: proceed to finops
-        state = {"is_clean": True, "security_errors": []}
-        route_after_security(state)  # → "finops"
-        
-        # Violations: retry with architect
-        state = {
-            "is_clean": False,
-            "security_errors": ["CKV_AWS_8"],
-            "retry_count": 1
-        }
-        route_after_security(state)  # → "architect"
-        
-        # Violations: max retries exceeded, proceed anyway
-        state = {
-            "is_clean": False,
-            "security_errors": ["CKV_AWS_8"],
-            "retry_count": 3
-        }
-        route_after_security(state)  # → "finops"
-        ```
+    If clean, proceed to parser (to visualize final secure code).
+    If violations, retry with architect.
     """
     is_clean = state.get("is_clean", False)
-    security_errors = state.get("security_errors", [])
     retry_count = state.get("retry_count", 0)
     
     if is_clean:
-        # All checks passed - proceed to cost estimation
-        logger.info("✓ Security validation complete - proceeding to FinOps")
-        return "finops"
-    
-    if security_errors and retry_count < MAX_RETRIES:
-        # Security violations found but retries available
+        logger.info("→ Routing to PARSER node (code is secure)")
+        return "parser"
+        
+    # If we are here, there are security errors
+    if retry_count < MAX_RETRIES:
         logger.warning(
-            f"→ Routing back to ARCHITECT for security fixes "
+            f"→ Security violations found. Routing back to ARCHITECT for retry "
             f"({retry_count}/{MAX_RETRIES})"
         )
         return "architect"
-    
-    # Max retries exceeded - proceed to finops anyway (user can decide)
+
+    # Max retries exceeded - proceed to parser anyway (user can decide)
     logger.warning(
         f"⚠ Max retries ({MAX_RETRIES}) exceeded. "
     )
-    logger.info("→ Proceeding to FinOps despite security issues")
-    return "finops"
+    logger.info("→ Proceeding to Parser despite security issues")
+    return "parser"
 
 
 def finops_node(state: AgentState) -> Dict[str, Any]:
     """
     LangGraph node that estimates infrastructure costs using Infracost.
-    
-    This node calls the FinOps service to calculate monthly cost estimates
-    for the validated Terraform code. It's a deterministic tool node.
-    
-    Args:
-        state (AgentState): Current workflow state with terraform_code
-    
-    Returns:
-        Dict[str, Any]: Updated state with cost_estimate field
-    
-    Example:
-        ```python
-        state = {"terraform_code": "resource \"aws_instance\" {...}"}
-        result = finops_node(state)
-        # result = {"cost_estimate": "$24.50/mo"}
-        ```
     """
     logger.info("=" * 60)
     logger.info("FINOPS NODE: Calculating cost estimate")
@@ -320,7 +182,8 @@ def finops_node(state: AgentState) -> Dict[str, Any]:
     if not terraform_code:
         logger.warning("No Terraform code for cost estimation")
         return {
-            "cost_estimate": "Unable to estimate (no code)"
+            "cost_estimate": "Unable to estimate (no code)",
+            "logs": state.get("logs", []) + ["⚠️  Cost estimation skipped - no code available"]
         }
     
     # Call FinOps service
@@ -329,72 +192,14 @@ def finops_node(state: AgentState) -> Dict[str, Any]:
     logger.info(f"✓ Cost estimate: {cost}")
     
     return {
-        "cost_estimate": cost
+        "cost_estimate": cost,
+        "logs": state.get("logs", []) + [f"💰 Cost calculated: {cost}"]
     }
 
 
 def create_workflow() -> StateGraph:
     """
     Create and compile the LangGraph workflow.
-    
-    This function constructs the complete stateful graph with all nodes and
-    conditional edges. The resulting compiled graph can be invoked with an
-    initial state to execute the workflow.
-    
-    Returns:
-        CompiledGraph: Executable LangGraph workflow
-    
-    Graph Structure:
-        ```
-        START
-          ↓
-        architect (LLM Node)
-          ↓
-        validator (Tool Node)
-          ↓
-        [Conditional]
-          ├─→ security (if valid)
-          ├─→ architect (if invalid, retry < max)
-          └─→ END (if invalid, retry >= max)
-        
-        security (Tool Node)
-          ↓
-        [Conditional]
-          ├─→ END (if clean)
-          ├─→ architect (if violations, retry < max)
-          └─→ END (if violations, retry >= max)
-        ```
-    
-    Usage:
-        ```python
-        # Create the workflow
-        workflow = create_workflow()
-        
-        # Define initial state
-        initial_state: AgentState = {
-            "user_prompt": "Create an EC2 instance",
-            "terraform_code": "",
-            "validation_error": None,
-            "security_errors": [],
-            "retry_count": 0,
-            "is_clean": False
-        }
-        
-        # Execute the workflow
-        final_state = workflow.invoke(initial_state)
-        
-        # Check results
-        if final_state["is_clean"]:
-            print("Success!")
-            print(final_state["terraform_code"])
-        else:
-            print("Failed after retries")
-        ```
-    
-    Configuration:
-        - Entry point: "architect" node
-        - Max retries: 3 (defined by MAX_RETRIES constant)
-        - State type: AgentState TypedDict
     """
     logger.info("Initializing LangGraph workflow")
     
@@ -404,6 +209,7 @@ def create_workflow() -> StateGraph:
     # Add nodes
     workflow.add_node("architect", architect_node)
     workflow.add_node("validator", validator_node)
+    workflow.add_node("parser", parser_node)
     workflow.add_node("security", security_node)
     workflow.add_node("finops", finops_node)
     workflow.add_node("ansible", config_node)
@@ -412,29 +218,40 @@ def create_workflow() -> StateGraph:
     workflow.set_entry_point("architect")
     
     # Add edges
-    # architect → validator (always)
     workflow.add_edge("architect", "validator")
     
     # validator → [conditional routing]
+    # If no validation error, go to security. Else, check retries.
+    def route_from_validator(state: AgentState):
+        validation_error = state.get("validation_error")
+        route = "security" if validation_error is None else route_after_validator(state)
+        logger.info(f"ROUTING: validator → {route} (validation_error={validation_error})")
+        return route
+    
     workflow.add_conditional_edges(
         "validator",
-        route_after_validator,
+        route_from_validator,
         {
+            "security": "security",    # Validation passed → security scan
             "architect": "architect",  # Retry
-            "security": "security",     # Continue
-            "end": END                  # Fail
+            "end": END                 # Fail
         }
     )
     
     # security → [conditional routing]
+    # If clean, go to parser. If violations, retry with architect.
     workflow.add_conditional_edges(
         "security",
         route_after_security,
         {
             "architect": "architect",  # Fix security issues
-            "finops": "finops"         # Continue to cost estimation
+            "parser": "parser"         # Clean → parse for visualization
         }
     )
+    
+    # parser → finops (always)
+    # Parser now runs on final, secured code
+    workflow.add_edge("parser", "finops")
     
     # finops → ansible (always)
     workflow.add_edge("finops", "ansible")
@@ -442,11 +259,9 @@ def create_workflow() -> StateGraph:
     # ansible → END (always - workflow complete)
     workflow.add_edge("ansible", END)
     
-    # Compile the graph
+    # Compile the graph with recursion limit
     app = workflow.compile()
-    
     logger.info("✓ LangGraph workflow compiled successfully")
-    
     return app
 
 
@@ -457,41 +272,6 @@ workflow_app = create_workflow()
 def run_workflow(user_prompt: str) -> AgentState:
     """
     Execute the complete workflow for a user prompt.
-    
-    This is the main entry point for external callers (like API endpoints).
-    It initializes the state, runs the workflow, and returns the final result.
-    
-    Args:
-        user_prompt (str): User's infrastructure request
-            Example: "Create a VPC with public and private subnets"
-    
-    Returns:
-        AgentState: Final state after workflow completion, containing:
-            - terraform_code: Generated HCL code (may be invalid if failed)
-            - is_clean: Whether code passed all checks
-            - validation_error: Last validation error (if any)
-            - security_errors: Remaining security violations (if any)
-            - retry_count: Number of attempts made
-    
-    Example:
-        ```python
-        result = run_workflow("Create an S3 bucket with encryption")
-        
-        if result["is_clean"]:
-            # Success - use the code
-            terraform_code = result["terraform_code"]
-            save_to_file(terraform_code)
-        else:
-            # Failure - check errors
-            if result["validation_error"]:
-                print(f"Validation failed: {result['validation_error']}")
-            if result["security_errors"]:
-                print(f"Security issues: {result['security_errors']}")
-        ```
-    
-    Raises:
-        Exception: Any unhandled errors during workflow execution
-            (logged with full traceback)
     """
     logger.info("=" * 70)
     logger.info(f"WORKFLOW START: {user_prompt[:50]}...")
@@ -503,37 +283,36 @@ def run_workflow(user_prompt: str) -> AgentState:
         "terraform_code": "",
         "validation_error": None,
         "security_errors": [],
+        "security_violations": [],
         "retry_count": 0,
         "is_clean": False,
         "cost_estimate": "",
-        "ansible_playbook": ""
+        "ansible_playbook": "",
+        "graph_data": {"nodes": [], "edges": []},
+        "logs": []  # Real-time event tracking
     }
     
     try:
-        # Run the workflow
-        final_state = workflow_app.invoke(initial_state)
+        # Run the workflow with increased recursion limit for self-healing
+        final_state = workflow_app.invoke(
+            initial_state,
+            config={"recursion_limit": 100}
+        )
         
         # Log results
         logger.info("=" * 70)
-        if final_state["is_clean"]:
+        if final_state.get("is_clean"):
             logger.info("✓ WORKFLOW SUCCESS")
+        elif final_state.get("validation_error"):
+            logger.error("✗ WORKFLOW FAILED (Validation Error)")
         else:
-            logger.warning("✗ WORKFLOW FAILED")
-            
-        logger.info(f"Total retries: {final_state['retry_count']}")
-        logger.info(f"Final code length: {len(final_state['terraform_code'])} chars")
-        
-        if final_state.get("validation_error"):
-            logger.warning(f"Validation error: {final_state['validation_error'][:100]}")
-        
-        if final_state.get("security_errors"):
-            logger.warning(f"Security errors: {final_state['security_errors']}")
-        
+            logger.warning("! WORKFLOW COMPLETED WITH WARNINGS")
         logger.info("=" * 70)
         
         return final_state
-    
+        
     except Exception as e:
-        logger.error(f"Workflow execution failed: {str(e)}")
-        logger.exception("Full traceback:")
-        raise
+        logger.exception("Unhandled exception in workflow execution")
+        # Return state with error info for frontend handling
+        initial_state["validation_error"] = f"Workflow Execution Error: {str(e)}"
+        return initial_state

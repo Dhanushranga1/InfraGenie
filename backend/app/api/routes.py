@@ -44,6 +44,7 @@ class GenerateResponse(BaseModel):
     retry_count: int = Field(description="Number of retry attempts made")
     is_clean: bool = Field(description="Whether code passed all validations")
     user_prompt: str = Field(description="Original user request")
+    graph_data: dict = Field(description="Structured graph data for frontend visualization")
 
 
 class DownloadRequest(BaseModel):
@@ -142,7 +143,8 @@ async def generate_infrastructure(request: GenerateRequest) -> GenerateResponse:
             security_errors=result.get("security_errors", []),
             retry_count=result["retry_count"],
             is_clean=result["is_clean"],
-            user_prompt=result["user_prompt"]
+            user_prompt=result["user_prompt"],
+            graph_data=result.get("graph_data", {"nodes": [], "edges": []})
         )
         
         logger.info(f"Workflow completed. Success: {response.success}")
@@ -183,6 +185,7 @@ async def download_deployment_kit(request: DownloadRequest):
     - playbook.yml - Ansible configuration
     - deploy.sh - Automated deployment script
     - README.md - Complete documentation
+                graph_data=result.get("graph_data", {"nodes": [], "edges": []}),
     - inventory.ini - Ansible inventory template
     
     Args:

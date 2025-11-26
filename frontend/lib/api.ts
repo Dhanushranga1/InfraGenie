@@ -9,7 +9,7 @@ import axios from 'axios';
 // Create Axios instance with base configuration
 export const api = axios.create({
   baseURL: 'http://localhost:8000/api/v1',
-  timeout: 120000, // 2 minutes for long-running LLM operations
+  timeout: 300000, // 5 minutes for LLM operations with retries (terraform init, checkov scans)
   headers: {
     'Content-Type': 'application/json',
   },
@@ -58,6 +58,18 @@ export interface GenerateResponse {
   retry_count: number;
   is_clean: boolean;
   user_prompt: string;
+  graph_data: {
+    nodes: Array<{
+      id: string;
+      type: string;
+      label: string;
+      parent: string | null;
+    }>;
+    edges: Array<{
+      source: string;
+      target: string;
+    }>;
+  };
 }
 
 export interface DownloadRequest {

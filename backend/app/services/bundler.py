@@ -33,6 +33,7 @@ This deployment kit contains everything needed to provision and configure your i
 - **main.tf** - Terraform infrastructure definition
 - **playbook.yml** - Ansible configuration management
 - **deploy.sh** - Automated deployment script
+- **destroy.sh** - Safe infrastructure cleanup script
 - **README.md** - This file
 
 ## 🚀 Quick Start
@@ -120,6 +121,22 @@ sudo crontab -e
 ## 📝 Infrastructure Details
 
 {user_prompt}
+
+## 🧹 Cleanup
+
+When you're done with your infrastructure, you can safely destroy it:
+
+```bash
+./destroy.sh
+```
+
+This will:
+1. Show you what resources will be destroyed
+2. Ask for confirmation
+3. Remove all provisioned infrastructure
+4. Optionally clean up generated files
+
+**Note:** Terraform maintains a state file (`terraform.tfstate`) that tracks your infrastructure. Keep this file if you plan to make updates to your infrastructure later. If you destroy everything, you can safely delete it.
 
 ## 🛠️ Troubleshooting
 
@@ -278,23 +295,104 @@ echo ""
 echo "📝 Step 3: Creating Ansible inventory..."
 echo "----------------------------------------"
 
-cat > inventory.ini << EOF
+# Check for generated SSH key
+if [ ! -f "infragenie-key.pem" ]; then
+    echo "${YELLOW}⚠️  SSH key 'infragenie-key.pem' not found${NC}"
+    echo "The Terraform code should have generated this key."
+    echo "Creating inventory without key specification..."
+    
+    cat > inventory.ini << EOF
 [servers]
 $INSTANCE_IP ansible_user=ubuntu ansible_ssh_common_args='-o StrictHostKeyChecking=no'
 EOF
+else
+    echo "${GREEN}✅ Found generated SSH key: infragenie-key.pem${NC}"
+    
+    cat > inventory.ini << EOF
+[servers]
+$INSTANCE_IP ansible_user=ubuntu ansible_ssh_private_key_file=infragenie-key.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+EOF
+fi
 
 echo "${GREEN}✅ Inventory created${NC}"
 echo ""
 
-# Wait for instance to be ready
-echo "⏳ Waiting for server to be ready (60 seconds)..."
-sleep 60
+# Wait for instance to be ready with intelligent SSH polling
+echo "⏳ Step 4: Waiting for SSH to be available..."
+echo "----------------------------------------------"
+
+RETRIES=0
+MAX_RETRIES=30  # 30 attempts * 10 seconds = 5 minutes total timeout
+START_TIME=$(date +%s)
+
+# Determine SSH command based on key availability
+if [ -f "infragenie-key.pem" ]; then
+    echo "${GREEN}✅ Using generated SSH key: infragenie-key.pem${NC}"
+    SSH_CMD="ssh -i infragenie-key.pem -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes ubuntu@$INSTANCE_IP exit"
+    SSH_USER_CMD="ssh -i infragenie-key.pem ubuntu@$INSTANCE_IP"
+else
+    echo "${YELLOW}⚠️  No SSH key found. Using default SSH authentication${NC}"
+    SSH_CMD="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes ubuntu@$INSTANCE_IP exit"
+    SSH_USER_CMD="ssh ubuntu@$INSTANCE_IP"
+fi
+
+echo "Testing SSH connection to $INSTANCE_IP..."
+echo ""
+
+until $SSH_CMD 2>/dev/null
+do
+    RETRIES=$((RETRIES+1))
+    ELAPSED=$(($(date +%s) - START_TIME))
+    ELAPSED_MIN=$((ELAPSED / 60))
+    ELAPSED_SEC=$((ELAPSED % 60))
+    
+    if [ $RETRIES -ge $MAX_RETRIES ]; then
+        echo ""
+        echo "${RED}❌ ERROR: SSH connection failed after $MAX_RETRIES attempts (${ELAPSED_MIN}m ${ELAPSED_SEC}s)${NC}"
+        echo ""
+        echo "Possible reasons:"
+        echo "  1. Instance is still booting (EC2 initialization can take 3-5 minutes)"
+        echo "  2. Security group doesn't allow SSH traffic (port 22) from your IP"
+        echo "  3. Instance is in a private subnet without public IP"
+        if [ ! -f "infragenie-key.pem" ]; then
+            echo "  4. SSH key 'infragenie-key.pem' was not found (check Terraform generated it)"
+        fi
+        echo ""
+        echo "Troubleshooting steps:"
+        echo "  • Check AWS Console: EC2 → Instances → Status Checks (should show 2/2 passed)"
+        echo "  • Verify Security Group allows port 22 from your IP"
+        echo "  • Run: terraform show | grep 'public_ip' to confirm instance has public IP"
+        if [ -f "infragenie-key.pem" ]; then
+            echo "  • Try manual SSH: $SSH_USER_CMD"
+        fi
+        echo ""
+        exit 1
+    fi
+    
+    # Progressive retry messaging (more detailed as time passes)
+    if [ $RETRIES -eq 1 ]; then
+        echo "🔄 Attempt 1/$MAX_RETRIES - Instance launching... (this is normal)"
+    elif [ $RETRIES -le 5 ]; then
+        echo "🔄 Attempt $RETRIES/$MAX_RETRIES - Still initializing... (~${ELAPSED}s elapsed)"
+    elif [ $RETRIES -le 15 ]; then
+        echo "🔄 Attempt $RETRIES/$MAX_RETRIES - Booting OS... (~${ELAPSED_MIN}m ${ELAPSED_SEC}s elapsed)"
+    else
+        echo "🔄 Attempt $RETRIES/$MAX_RETRIES - Taking longer than usual... (~${ELAPSED_MIN}m ${ELAPSED_SEC}s elapsed)"
+    fi
+    
+    sleep 10
+done
+
+TOTAL_ELAPSED=$(($(date +%s) - START_TIME))
+echo ""
+echo "${GREEN}✅ SSH connection established after ${TOTAL_ELAPSED}s (${RETRIES} attempts)${NC}"
+echo ""
 
 # Run Ansible configuration
-echo "⚙️  Step 4: Configuring server with Ansible..."
+echo "⚙️  Step 5: Configuring server with Ansible..."
 echo "---------------------------------------------"
 
-# Retry logic for Ansible (server might not be ready immediately)
+# Retry logic for Ansible (in case of transient issues)
 max_attempts=3
 attempt=1
 
@@ -306,8 +404,8 @@ while [ $attempt -le $max_attempts ]; do
         break
     else
         if [ $attempt -lt $max_attempts ]; then
-            echo "${YELLOW}⚠️  Ansible failed, waiting 30 seconds before retry...${NC}"
-            sleep 30
+            echo "${YELLOW}⚠️  Ansible failed, waiting 20 seconds before retry...${NC}"
+            sleep 20
             attempt=$((attempt + 1))
         else
             echo "${RED}❌ Ansible configuration failed after $max_attempts attempts${NC}"
@@ -333,13 +431,98 @@ echo "⚠️  Important Reminders:"
 echo "  1. Monitor your cloud costs regularly"
 echo "  2. Server auto-shuts down at 8 PM daily"
 echo "  3. Review security settings in AWS console"
+echo "  4. Terraform state is in terraform.tfstate - KEEP THIS FILE for future updates"
 echo ""
 echo "🔗 Next Steps:"
-echo "  - SSH: ssh ubuntu@$INSTANCE_IP"
+if [ -f "infragenie-key.pem" ]; then
+    echo "  - SSH: ssh -i infragenie-key.pem ubuntu@$INSTANCE_IP"
+else
+    echo "  - SSH: ssh ubuntu@$INSTANCE_IP"
+fi
 echo "  - Verify: terraform output"
-echo "  - Cleanup: terraform destroy (when done)"
+echo "  - Update: Modify main.tf and run 'terraform apply' again"
+echo "  - Cleanup: Run './destroy.sh' or 'terraform destroy' (when done)"
 echo ""
 echo "Happy deploying! 🚀"
+"""
+
+
+# Destroy script template for infrastructure cleanup
+DESTROY_SCRIPT_TEMPLATE = """#!/bin/bash
+
+# InfraGenie - Infrastructure Destruction Script
+# This script safely destroys all provisioned infrastructure
+# Use this when you're done with your deployment
+
+set -e
+
+# Colors for output
+GREEN='\\033[0;32m'
+YELLOW='\\033[1;33m'
+RED='\\033[0;31m'
+NC='\\033[0m' # No Color
+
+echo "⚠️  ================================================"
+echo "     INFRASTRUCTURE DESTRUCTION"
+echo "    ================================================"
+echo ""
+echo "${YELLOW}WARNING: This will PERMANENTLY DELETE all resources.${NC}"
+echo ""
+echo "Resources that will be destroyed:"
+terraform show -no-color | grep "^resource" || echo "  (Run 'terraform show' to see details)"
+echo ""
+
+read -p "Are you absolutely sure? Type 'yes' to continue: " confirm
+
+if [ "$confirm" != "yes" ]; then
+    echo "Destruction cancelled."
+    exit 0
+fi
+
+echo ""
+echo "🗑️  Starting infrastructure destruction..."
+echo "=========================================="
+echo ""
+
+# Check if Terraform state exists
+if [ ! -f "terraform.tfstate" ]; then
+    echo "${YELLOW}⚠️  No terraform.tfstate found.${NC}"
+    echo "Either infrastructure was never created or state file is missing."
+    read -p "Continue with destroy anyway? (yes/no): " force_confirm
+    if [ "$force_confirm" != "yes" ]; then
+        echo "Destruction cancelled."
+        exit 0
+    fi
+fi
+
+# Run Terraform destroy
+terraform destroy -auto-approve
+
+if [ $? -eq 0 ]; then
+    echo ""
+    echo "===================================="
+    echo "${GREEN}✅ Infrastructure Destroyed${NC}"
+    echo "===================================="
+    echo ""
+    echo "All resources have been removed."
+    echo "You can safely delete this directory."
+    echo ""
+    
+    # Optionally remove generated files
+    read -p "Remove generated files (terraform.tfstate, infragenie-key.pem)? (yes/no): " cleanup
+    if [ "$cleanup" == "yes" ]; then
+        rm -f terraform.tfstate terraform.tfstate.backup infragenie-key.pem inventory.ini
+        echo "${GREEN}✅ Cleaned up generated files${NC}"
+    fi
+else
+    echo "${RED}❌ Destruction failed${NC}"
+    echo "Check the error messages above."
+    echo "You may need to manually clean up resources in the AWS console."
+    exit 1
+fi
+
+echo ""
+echo "Thank you for using InfraGenie! 👋"
 """
 
 
@@ -435,6 +618,12 @@ def create_deployment_kit(state: AgentState) -> io.BytesIO:
             deploy_info.external_attr = 0o755 << 16  # Unix executable permissions
             zip_file.writestr(deploy_info, DEPLOY_SCRIPT_TEMPLATE)
             
+            # Add destroy.sh with executable permissions
+            logger.info("Adding destroy.sh to kit...")
+            destroy_info = zipfile.ZipInfo('destroy.sh')
+            destroy_info.external_attr = 0o755 << 16  # Unix executable permissions
+            zip_file.writestr(destroy_info, DESTROY_SCRIPT_TEMPLATE)
+            
             # Add README.md
             logger.info("Adding README.md to kit...")
             readme_content = README_TEMPLATE.format(
@@ -462,7 +651,7 @@ def create_deployment_kit(state: AgentState) -> io.BytesIO:
         
         logger.info(f"✓ Deployment kit created successfully")
         logger.info(f"  - Size: {zip_size / 1024:.2f} KB")
-        logger.info(f"  - Files: main.tf, playbook.yml, deploy.sh, README.md, inventory.ini")
+        logger.info(f"  - Files: main.tf, playbook.yml, deploy.sh, destroy.sh, README.md, inventory.ini")
         
         return zip_buffer
     
