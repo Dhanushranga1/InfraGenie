@@ -15,6 +15,7 @@ This validates that the "DevOps Toolbox" container is correctly configured.
 """
 
 import subprocess
+import os
 from typing import Dict, Any
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,17 +43,23 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+# Get allowed origins from environment variable or use defaults
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "https://infra-genie.vercel.app",
+    "https://infra-genie-git-main-dhanushranga1s-projects.vercel.app",
+]
+
+# Log CORS origins for debugging
+logger.info(f"CORS configured for origins: {CORS_ORIGINS}")
+
 # Configure CORS for frontend communication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # Next.js dev server
-        "http://localhost:3001",  # Alternative port
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-        "https://infra-genie.vercel.app",  # Production frontend
-        "https://infra-genie-git-main-dhanushranga1s-projects.vercel.app",  # Vercel preview
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],  # Allow all HTTP methods (GET, POST, etc.)
     allow_headers=["*"],  # Allow all headers
