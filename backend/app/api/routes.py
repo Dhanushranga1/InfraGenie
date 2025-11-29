@@ -34,7 +34,10 @@ class GenerateRequest(BaseModel):
 
 
 class GenerateResponse(BaseModel):
-    """Response model for infrastructure generation."""
+    """Response model for infrastructure generation.
+    
+    Phase 9 Enhancement: Added planning and metrics fields from enhanced state schema.
+    """
     success: bool = Field(description="Whether generation completed successfully")
     terraform_code: str = Field(description="Generated Terraform HCL code")
     ansible_playbook: str = Field(description="Generated Ansible playbook YAML")
@@ -45,6 +48,28 @@ class GenerateResponse(BaseModel):
     is_clean: bool = Field(description="Whether code passed all validations")
     user_prompt: str = Field(description="Original user request")
     graph_data: dict = Field(description="Structured graph data for frontend visualization")
+    
+    # Phase 9: New fields from enhanced state schema
+    completeness_score: float = Field(
+        default=1.0,
+        description="Infrastructure completeness score (0.0 to 1.0)"
+    )
+    missing_components: list[str] = Field(
+        default_factory=list,
+        description="List of components that are required but missing"
+    )
+    infrastructure_type: str = Field(
+        default="unknown",
+        description="Infrastructure complexity: simple, medium, complex, or unknown"
+    )
+    planned_resources: int = Field(
+        default=0,
+        description="Expected number of resources from terraform plan"
+    )
+    assumptions: dict[str, str] = Field(
+        default_factory=dict,
+        description="Assumptions made by clarifier for missing information"
+    )
 
 
 class DownloadRequest(BaseModel):
@@ -133,7 +158,7 @@ async def generate_infrastructure(request: GenerateRequest) -> GenerateResponse:
         logger.info("Starting workflow execution...")
         result = run_workflow(request.prompt)
         
-        # Format response
+        # Format response (Phase 9: Added new metrics fields)
         response = GenerateResponse(
             success=result["is_clean"],
             terraform_code=result["terraform_code"],
@@ -144,7 +169,13 @@ async def generate_infrastructure(request: GenerateRequest) -> GenerateResponse:
             retry_count=result["retry_count"],
             is_clean=result["is_clean"],
             user_prompt=result["user_prompt"],
-            graph_data=result.get("graph_data", {"nodes": [], "edges": []})
+            graph_data=result.get("graph_data", {"nodes": [], "edges": []}),
+            # Phase 9: Map new state fields to response
+            completeness_score=result.get("completeness_score", 1.0),
+            missing_components=result.get("missing_components", []),
+            infrastructure_type=result.get("infrastructure_type", "unknown"),
+            planned_resources=result.get("planned_resources", 0),
+            assumptions=result.get("assumptions", {})
         )
         
         logger.info(f"Workflow completed. Success: {response.success}")
