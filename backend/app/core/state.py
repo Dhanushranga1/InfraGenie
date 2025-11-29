@@ -101,3 +101,12 @@ class AgentState(TypedDict):
     ansible_playbook: str
     graph_data: dict  # Structured graph representation of parsed HCL
     logs: List[str]  # Real-time workflow event log
+    
+    # Phase 1: Planning and completeness tracking fields
+    planned_components: List[Dict[str, Any]]  # List of required infrastructure components
+    execution_order: List[str]  # Order to generate components
+    assumptions: Dict[str, str]  # Assumptions made about missing information
+    planned_resources: int  # Expected resource count from terraform plan
+    completeness_score: float  # 0.0 to 1.0 indicating completeness
+    missing_components: List[str]  # Components that are required but missing
+    infrastructure_type: str  # "simple", "medium", "complex", or "unknown"

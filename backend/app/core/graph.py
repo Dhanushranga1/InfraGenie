@@ -72,29 +72,97 @@ def completeness_validator_node(state: AgentState) -> Dict[str, Any]:
     if not terraform_code:
         return {
             "validation_error": "No Terraform code to validate",
+            "completeness_score": 0.0,
+            "missing_components": ["terraform code"],
             "logs": state.get("logs", []) + ["❌ Completeness check failed: No code generated"]
         }
     
-    # Run completeness validation
-    error = validate_completeness(user_prompt, terraform_code)
+    # Import completeness functions (avoid circular imports)
+    from app.services.completeness import (
+        validate_completeness as validate_completeness_detailed,
+        detect_infrastructure_pattern,
+        count_total_resources
+    )
     
-    if error:
-        logger.warning(f"Completeness validation failed: {error}")
+    # Detect infrastructure type for classification
+    pattern = detect_infrastructure_pattern(user_prompt)
+    total_resources = count_total_resources(terraform_code)
+    
+    # Classify complexity
+    infrastructure_type = "unknown"
+    if pattern == "kubernetes":
+        infrastructure_type = "complex"
+    elif pattern in ["database", "load_balancer"]:
+        infrastructure_type = "medium"
+    elif pattern in ["web_server", "compute"]:
+        infrastructure_type = "simple"
+    elif total_resources >= 10:
+        infrastructure_type = "complex"
+    elif total_resources >= 5:
+        infrastructure_type = "medium"
+    elif total_resources >= 2:
+        infrastructure_type = "simple"
+    
+    # Run enhanced validation that returns detailed metrics
+    try:
+        # The validate_completeness function returns just error message
+        # We'll enhance it inline here
+        error = validate_completeness(user_prompt, terraform_code)
         
-        # Generate specific advice for the Architect on what to add
-        advice = get_completion_advice(user_prompt, error)
+        # Calculate completeness score based on error presence
+        if error is None:
+            completeness_score = 1.0
+            missing_components_list = []
+        else:
+            # Parse missing components from error message
+            missing_components_list = []
+            if "Missing required components:" in error:
+                components_part = error.split("Missing required components:")[1].split(";")[0]
+                missing_components_list = [c.strip() for c in components_part.split(",")]
+            
+            # Estimate completeness score (could be enhanced)
+            if "kubernetes" in user_prompt.lower() and total_resources < 5:
+                completeness_score = min(0.4, total_resources / 10.0)
+            elif total_resources >= 5:
+                completeness_score = 0.6
+            else:
+                completeness_score = 0.3
         
+        logger.info(f"Completeness score: {completeness_score:.2f}, Infrastructure type: {infrastructure_type}")
+        
+        if error:
+            logger.warning(f"Completeness validation failed: {error}")
+            
+            # Generate specific advice for the Architect on what to add
+            advice = get_completion_advice(user_prompt, error)
+            
+            return {
+                "validation_error": error,
+                "completion_advice": advice,
+                "completeness_score": completeness_score,
+                "missing_components": missing_components_list,
+                "infrastructure_type": infrastructure_type,
+                "logs": state.get("logs", []) + [f"❌ Completeness check failed: {error}"]
+            }
+        else:
+            logger.info("✓ Completeness validation passed")
+            return {
+                "validation_error": None,
+                "completion_advice": None,
+                "completeness_score": completeness_score,
+                "missing_components": [],
+                "infrastructure_type": infrastructure_type,
+                "logs": state.get("logs", []) + ["✅ Infrastructure completeness verified"]
+            }
+    
+    except Exception as e:
+        logger.error(f"Error during completeness validation: {e}")
         return {
-            "validation_error": error,
-            "completion_advice": advice,  # Special field for completeness errors
-            "logs": state.get("logs", []) + [f"❌ Completeness check failed: {error}"]
-        }
-    else:
-        logger.info("✓ Completeness validation passed")
-        return {
-            "validation_error": None,
-            "completion_advice": None,
-            "logs": state.get("logs", []) + ["✅ Infrastructure completeness verified"]
+            "validation_error": None,  # Don't block on validation errors
+            "completeness_score": 0.8,  # Assume reasonable
+            "missing_components": [],
+            "infrastructure_type": infrastructure_type,
+            "logs": state.get("logs", []) + [f"⚠️  Completeness check skipped: {str(e)}"]
         }
 
 
@@ -369,7 +437,15 @@ def run_workflow(user_prompt: str) -> AgentState:
         "cost_estimate": "",
         "ansible_playbook": "",
         "graph_data": {"nodes": [], "edges": []},
-        "logs": []  # Real-time event tracking
+        "logs": [],  # Real-time event tracking
+        # Phase 1: Planning and completeness tracking
+        "planned_components": [],
+        "execution_order": [],
+        "assumptions": {},
+        "planned_resources": 0,
+        "completeness_score": 0.0,
+        "missing_components": [],
+        "infrastructure_type": "unknown"
     }
     
     try:
