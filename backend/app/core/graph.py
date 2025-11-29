@@ -14,14 +14,15 @@ from app.core.state import AgentState
 from app.core.agents.architect import architect_node
 from app.core.agents.config import config_node
 from app.services.sandbox import validate_terraform, run_checkov
+from app.services.completeness import validate_completeness, get_completion_advice
 from app.services.finops import get_cost_estimate
 # Assuming parser is available here or inside the function as originally written
 # from app.services.parser import parse_hcl_to_graph 
 
 logger = logging.getLogger(__name__)
 
-# Maximum number of retry attempts before failing
-MAX_RETRIES = 3
+# Maximum number of retry attempts before failing (increased from 3 to 5)
+MAX_RETRIES = 5
 
 
 def validator_node(state: AgentState) -> Dict[str, Any]:
@@ -49,6 +50,51 @@ def validator_node(state: AgentState) -> Dict[str, Any]:
         return {
             "validation_error": None,
             "logs": state.get("logs", []) + ["✅ Terraform syntax validation passed"]
+        }
+
+
+def completeness_validator_node(state: AgentState) -> Dict[str, Any]:
+    """
+    LangGraph node that validates infrastructure completeness.
+    
+    This node checks if the generated code contains ALL required resources
+    to fulfill the user's intent. For example:
+    - "Kubernetes cluster" requires VPC + cluster + node groups, not just VPC
+    - "RDS database" requires VPC + subnet group + security group + DB instance
+    
+    This prevents the common LLM failure mode of generating partial infrastructure.
+    """
+    logger.info("COMPLETENESS VALIDATOR NODE: Checking infrastructure completeness")
+    
+    user_prompt = state.get("user_prompt", "")
+    terraform_code = state.get("terraform_code", "")
+    
+    if not terraform_code:
+        return {
+            "validation_error": "No Terraform code to validate",
+            "logs": state.get("logs", []) + ["❌ Completeness check failed: No code generated"]
+        }
+    
+    # Run completeness validation
+    error = validate_completeness(user_prompt, terraform_code)
+    
+    if error:
+        logger.warning(f"Completeness validation failed: {error}")
+        
+        # Generate specific advice for the Architect on what to add
+        advice = get_completion_advice(user_prompt, error)
+        
+        return {
+            "validation_error": error,
+            "completion_advice": advice,  # Special field for completeness errors
+            "logs": state.get("logs", []) + [f"❌ Completeness check failed: {error}"]
+        }
+    else:
+        logger.info("✓ Completeness validation passed")
+        return {
+            "validation_error": None,
+            "completion_advice": None,
+            "logs": state.get("logs", []) + ["✅ Infrastructure completeness verified"]
         }
 
 
@@ -209,6 +255,7 @@ def create_workflow() -> StateGraph:
     # Add nodes
     workflow.add_node("architect", architect_node)
     workflow.add_node("validator", validator_node)
+    workflow.add_node("completeness_validator", completeness_validator_node)
     workflow.add_node("parser", parser_node)
     workflow.add_node("security", security_node)
     workflow.add_node("finops", finops_node)
@@ -221,10 +268,10 @@ def create_workflow() -> StateGraph:
     workflow.add_edge("architect", "validator")
     
     # validator → [conditional routing]
-    # If no validation error, go to security. Else, check retries.
+    # If no syntax error, go to completeness validator. Else, check retries.
     def route_from_validator(state: AgentState):
         validation_error = state.get("validation_error")
-        route = "security" if validation_error is None else route_after_validator(state)
+        route = "completeness_validator" if validation_error is None else route_after_validator(state)
         logger.info(f"ROUTING: validator → {route} (validation_error={validation_error})")
         return route
     
@@ -232,9 +279,41 @@ def create_workflow() -> StateGraph:
         "validator",
         route_from_validator,
         {
-            "security": "security",    # Validation passed → security scan
+            "completeness_validator": "completeness_validator",  # Syntax passed → check completeness
             "architect": "architect",  # Retry
             "end": END                 # Fail
+        }
+    )
+    
+    # completeness_validator → [conditional routing]
+    # If complete, go to security. If incomplete, retry with architect.
+    def route_from_completeness(state: AgentState):
+        validation_error = state.get("validation_error")
+        retry_count = state.get("retry_count", 0)
+        
+        if validation_error is None:
+            logger.info("ROUTING: completeness_validator → security (infrastructure complete)")
+            return "security"
+        
+        # Completeness validation failed
+        if retry_count < MAX_RETRIES:
+            logger.warning(
+                f"ROUTING: completeness_validator → architect for retry "
+                f"({retry_count}/{MAX_RETRIES}) - Incomplete infrastructure"
+            )
+            return "architect"
+        
+        # Max retries exceeded - fail workflow
+        logger.error(f"ROUTING: Max retries ({MAX_RETRIES}) exceeded on completeness check")
+        return "end"
+    
+    workflow.add_conditional_edges(
+        "completeness_validator",
+        route_from_completeness,
+        {
+            "security": "security",    # Complete → security scan
+            "architect": "architect",  # Incomplete → retry with advice
+            "end": END                 # Max retries exceeded
         }
     )
     
@@ -282,6 +361,7 @@ def run_workflow(user_prompt: str) -> AgentState:
         "user_prompt": user_prompt,
         "terraform_code": "",
         "validation_error": None,
+        "completion_advice": None,
         "security_errors": [],
         "security_violations": [],
         "retry_count": 0,

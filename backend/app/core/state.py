@@ -27,6 +27,11 @@ class AgentState(TypedDict):
         terraform_code (str): Current version of generated Terraform HCL code
             
         validation_error (Optional[str]): Human-readable error from terraform validate
+            or completeness check. Set by both validator_node and completeness_validator_node.
+        
+        completion_advice (Optional[str]): Detailed advice from completeness validator
+            explaining which resources are missing and how to add them. Used by Architect
+            for targeted remediation of incomplete infrastructure.
             
         security_errors (List[str]): Legacy list of Checkov check IDs (deprecated)
         
@@ -42,7 +47,7 @@ class AgentState(TypedDict):
                 }
             ]
             
-        retry_count (int): Counter tracking fix attempts (max 3)
+        retry_count (int): Counter tracking fix attempts (max 5)
             
         is_clean (bool): Flag indicating all checks passed
             
@@ -59,12 +64,15 @@ class AgentState(TypedDict):
     Lifecycle:
         1. Initialize with user_prompt
         2. Architect generates terraform_code
-        3. Validator sets validation_error if issues found
-        4. Security sets security_errors if vulnerabilities detected
-        5. Architect fixes errors, increments retry_count
-        6. Loop until is_clean=True or retry_count exceeds limit
-        7. FinOps calculates cost_estimate
-        8. Config agent generates ansible_playbook
+        3. Validator sets validation_error if syntax issues found
+        4. Completeness validator checks if infrastructure is complete:
+           - Sets validation_error + completion_advice if missing resources
+           - Routes back to Architect with specific missing component list
+        5. Security sets security_errors if vulnerabilities detected
+        6. Architect fixes errors, increments retry_count
+        7. Loop until is_clean=True or retry_count exceeds limit (max 5)
+        8. FinOps calculates cost_estimate
+        9. Config agent generates ansible_playbook
     
     Example:
         ```python
@@ -72,6 +80,7 @@ class AgentState(TypedDict):
             "user_prompt": "Deploy a PostgreSQL RDS instance",
             "terraform_code": "",
             "validation_error": None,
+            "completion_advice": None,
             "security_errors": [],
             "retry_count": 0,
             "is_clean": False,
@@ -83,6 +92,7 @@ class AgentState(TypedDict):
     user_prompt: str
     terraform_code: str
     validation_error: Optional[str]
+    completion_advice: Optional[str]  # New: advice from completeness validator
     security_errors: List[str]  # Legacy: List of check IDs
     security_violations: List[Dict[str, str]]  # Detailed violation info
     retry_count: int

@@ -24,6 +24,12 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.core.state import AgentState
 from app.core.utils import clean_llm_output
+from app.core.agents.templates import (
+    K8S_CLUSTER_TEMPLATE,
+    COMPLETENESS_CHECKLIST,
+    DATABASE_TEMPLATE,
+    MULTI_TIER_TEMPLATE
+)
 
 logger = logging.getLogger(__name__)
 
@@ -475,6 +481,14 @@ resource "aws_instance" "web_server" {
 
 **If ANY of these are missing, ADD THEM NOW before outputting.**
 **This is your FINAL CHECK. Users will be locked out without SSH keys.**
+
+{K8S_CLUSTER_TEMPLATE}
+
+{DATABASE_TEMPLATE}
+
+{MULTI_TIER_TEMPLATE}
+
+{COMPLETENESS_CHECKLIST}
 """
 
 
@@ -527,6 +541,7 @@ def build_architect_input(state: AgentState) -> str:
     """
     user_prompt = state["user_prompt"]
     validation_error = state.get("validation_error")
+    completion_advice = state.get("completion_advice")  # New: completeness validator advice
     security_errors = state.get("security_errors", [])
     security_violations = state.get("security_violations", [])
     retry_count = state.get("retry_count", 0)
@@ -535,7 +550,7 @@ def build_architect_input(state: AgentState) -> str:
     message_parts = []
     
     # Determine mode: Creation vs Remediation
-    is_remediation = retry_count > 0 or validation_error or security_violations
+    is_remediation = retry_count > 0 or validation_error or security_violations or completion_advice
     
     if not is_remediation:
         # MODE 1: CREATION
@@ -548,8 +563,17 @@ def build_architect_input(state: AgentState) -> str:
         message_parts.append(f"Original Request: {user_prompt}\n")
         message_parts.append("You are fixing your own code. Maintain the architecture intent.\n")
     
+    # Add completeness error context (highest priority - infrastructure is incomplete!)
+    if completion_advice:
+        message_parts.append(
+            f"**🚨 INFRASTRUCTURE INCOMPLETE - MISSING CRITICAL COMPONENTS 🚨**\n\n"
+            f"{completion_advice}\n\n"
+            "**ACTION REQUIRED:** Add the missing resources listed above. "
+            "Do NOT just create networking - create the ACTUAL infrastructure requested!\n"
+        )
+    
     # Add validation error context
-    if validation_error:
+    if validation_error and not completion_advice:  # Only show if not already showing completeness error
         message_parts.append(
             f"**TERRAFORM VALIDATION ERROR:**\n"
             f"```\n{validation_error}\n```\n"
