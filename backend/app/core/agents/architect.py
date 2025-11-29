@@ -533,6 +533,10 @@ def build_architect_input(state: AgentState) -> str:
     Construct the input message for the Architect based on current state.
     Includes detailed security violation context for intelligent remediation.
     
+    Phase 7 Enhancement: Now includes context from planner and clarifier agents
+    to provide richer information for first-time generation and preserve context
+    during remediation attempts.
+    
     Args:
         state (AgentState): Current workflow state
     
@@ -547,21 +551,71 @@ def build_architect_input(state: AgentState) -> str:
     retry_count = state.get("retry_count", 0)
     terraform_code = state.get("terraform_code", "")
     
+    # Phase 7: Include planner and clarifier context
+    planned_components = state.get("planned_components", [])
+    execution_order = state.get("execution_order", [])
+    assumptions = state.get("assumptions", {})
+    infrastructure_type = state.get("infrastructure_type", "unknown")
+    
     message_parts = []
     
     # Determine mode: Creation vs Remediation
     is_remediation = retry_count > 0 or validation_error or security_violations or completion_advice
     
     if not is_remediation:
-        # MODE 1: CREATION
-        message_parts.append(f"**NEW INFRASTRUCTURE REQUEST:**\n{user_prompt}")
-        message_parts.append("\nGenerate secure, production-ready Terraform code.")
+        # MODE 1: CREATION with enhanced planning context
+        message_parts.append(f"**NEW INFRASTRUCTURE REQUEST:**\n{user_prompt}\n")
+        
+        # Add infrastructure type classification
+        if infrastructure_type != "unknown":
+            message_parts.append(f"**Infrastructure Type:** {infrastructure_type.upper()}")
+        
+        # Add explicit assumptions from clarifier
+        if assumptions:
+            message_parts.append("\n**EXPLICIT ASSUMPTIONS (from Clarifier):**")
+            for key, value in assumptions.items():
+                message_parts.append(f"  - {key}: {value}")
+            message_parts.append("")
+        
+        # Add planned components from planner
+        if planned_components:
+            message_parts.append("**REQUIRED COMPONENTS (from Planner):**")
+            message_parts.append("You MUST implement ALL of these components:\n")
+            for i, component in enumerate(planned_components, 1):
+                comp_name = component.get("name", f"Component {i}")
+                comp_desc = component.get("description", "")
+                comp_deps = component.get("dependencies", [])
+                
+                message_parts.append(f"{i}. **{comp_name}**")
+                if comp_desc:
+                    message_parts.append(f"   Purpose: {comp_desc}")
+                if comp_deps:
+                    deps_str = ", ".join(comp_deps)
+                    message_parts.append(f"   Dependencies: {deps_str}")
+            message_parts.append("")
+        
+        # Add execution order guidance
+        if execution_order:
+            order_preview = ", ".join(execution_order[:5])
+            if len(execution_order) > 5:
+                order_preview += f", ... (+{len(execution_order)-5} more)"
+            message_parts.append(f"**BUILD ORDER:** {order_preview}\n")
+        
+        message_parts.append("Generate secure, production-ready Terraform code implementing ALL components above.")
         message_parts.append("\n🚨 **CRITICAL REMINDER:** If creating ANY EC2 instances, you MUST include ALL THREE SSH key resources (tls_private_key, aws_key_pair, local_file) and add key_name to EVERY instance. See Rule #2. This is NOT optional.")
     else:
-        # MODE 2: REMEDIATION
+        # MODE 2: REMEDIATION with preserved context
         message_parts.append(f"**REMEDIATION MODE - Retry {retry_count}**")
-        message_parts.append(f"Original Request: {user_prompt}\n")
-        message_parts.append("You are fixing your own code. Maintain the architecture intent.\n")
+        message_parts.append(f"Original Request: {user_prompt}")
+        
+        # Preserve planning context across retries
+        if infrastructure_type != "unknown":
+            message_parts.append(f"Infrastructure Type: {infrastructure_type}")
+        
+        if planned_components:
+            message_parts.append(f"Required Components: {len(planned_components)} components planned")
+        
+        message_parts.append("\nYou are fixing your own code. Maintain the architecture intent.\n")
     
     # Add completeness error context (highest priority - infrastructure is incomplete!)
     if completion_advice:
