@@ -4,6 +4,9 @@ LangGraph Workflow Orchestration
 This module defines the stateful workflow graph that coordinates multiple agents
 and tools to generate validated, secure infrastructure-as-code. The graph
 implements a cyclic workflow with self-correction loops.
+
+Phase 8 Enhancement: Integrated planner, clarifier, and deep validation nodes
+into the workflow for improved infrastructure completeness.
 """
 
 import logging
@@ -13,8 +16,11 @@ from langgraph.graph import StateGraph, END
 from app.core.state import AgentState
 from app.core.agents.architect import architect_node
 from app.core.agents.config import config_node
+from app.core.agents.planner import planner_agent
+from app.core.agents.clarifier import clarify_requirements
 from app.services.sandbox import validate_terraform, run_checkov
 from app.services.completeness import validate_completeness, get_completion_advice
+from app.services.deep_validation import deep_validator_node
 from app.services.finops import get_cost_estimate
 # Assuming parser is available here or inside the function as originally written
 # from app.services.parser import parse_hcl_to_graph 
@@ -314,25 +320,65 @@ def finops_node(state: AgentState) -> Dict[str, Any]:
 def create_workflow() -> StateGraph:
     """
     Create and compile the LangGraph workflow.
+    
+    Phase 8: Enhanced workflow with planner, clarifier, and deep validation nodes.
+    
+    Workflow flow:
+    1. clarifier: Analyze request and make assumptions
+    2. planner: Decompose into components and execution order
+    3. architect: Generate Terraform code
+    4. validator: Syntax validation
+    5. completeness_validator: Check infrastructure completeness
+    6. validate_deep: Run terraform plan for deeper validation
+    7. security: Security scanning with Checkov
+    8. parser: Parse to graph structure
+    9. finops: Cost estimation
+    10. ansible: Configuration management
     """
-    logger.info("Initializing LangGraph workflow")
+    logger.info("Initializing LangGraph workflow (Phase 8 Enhanced)")
     
     # Create the state graph
     workflow = StateGraph(AgentState)
     
-    # Add nodes
+    # Add nodes (Phase 8: Added clarifier, planner, validate_deep)
+    workflow.add_node("clarifier", clarify_requirements)
+    workflow.add_node("planner", planner_agent)
     workflow.add_node("architect", architect_node)
     workflow.add_node("validator", validator_node)
     workflow.add_node("completeness_validator", completeness_validator_node)
+    workflow.add_node("validate_deep", deep_validator_node)
     workflow.add_node("parser", parser_node)
     workflow.add_node("security", security_node)
     workflow.add_node("finops", finops_node)
     workflow.add_node("ansible", config_node)
     
-    # Set entry point
-    workflow.set_entry_point("architect")
+    # Set entry point (Phase 8: Changed from "architect" to "clarifier")
+    workflow.set_entry_point("clarifier")
     
     # Add edges
+    # clarifier → [conditional routing]
+    # If proceed=true, go to planner. If proceed=false (too vague), end with clarification questions.
+    def route_from_clarifier(state: AgentState):
+        validation_error = state.get("validation_error")
+        if validation_error:
+            # Request too vague - need user clarification
+            logger.warning(f"ROUTING: clarifier → END (request too vague)")
+            return "end"
+        logger.info("ROUTING: clarifier → planner (assumptions made)")
+        return "planner"
+    
+    workflow.add_conditional_edges(
+        "clarifier",
+        route_from_clarifier,
+        {
+            "planner": "planner",
+            "end": END
+        }
+    )
+    
+    # planner → architect (always)
+    workflow.add_edge("planner", "architect")
+    
     workflow.add_edge("architect", "validator")
     
     # validator → [conditional routing]
@@ -354,14 +400,14 @@ def create_workflow() -> StateGraph:
     )
     
     # completeness_validator → [conditional routing]
-    # If complete, go to security. If incomplete, retry with architect.
+    # If complete, go to deep validation. If incomplete, retry with architect.
     def route_from_completeness(state: AgentState):
         validation_error = state.get("validation_error")
         retry_count = state.get("retry_count", 0)
         
         if validation_error is None:
-            logger.info("ROUTING: completeness_validator → security (infrastructure complete)")
-            return "security"
+            logger.info("ROUTING: completeness_validator → validate_deep (infrastructure complete)")
+            return "validate_deep"
         
         # Completeness validation failed
         if retry_count < MAX_RETRIES:
@@ -379,9 +425,40 @@ def create_workflow() -> StateGraph:
         "completeness_validator",
         route_from_completeness,
         {
-            "security": "security",    # Complete → security scan
-            "architect": "architect",  # Incomplete → retry with advice
-            "end": END                 # Max retries exceeded
+            "validate_deep": "validate_deep",  # Complete → deep validation with terraform plan
+            "architect": "architect",          # Incomplete → retry with advice
+            "end": END                          # Max retries exceeded
+        }
+    )
+    
+    # validate_deep → [conditional routing]
+    # If deep validation passes, go to security. If fails, retry with architect.
+    def route_from_deep_validation(state: AgentState):
+        validation_error = state.get("validation_error")
+        retry_count = state.get("retry_count", 0)
+        
+        if validation_error is None:
+            logger.info("ROUTING: validate_deep → security (terraform plan succeeded)")
+            return "security"
+        
+        # Deep validation failed
+        if retry_count < MAX_RETRIES:
+            logger.warning(
+                f"ROUTING: validate_deep → architect for retry "
+                f"({retry_count}/{MAX_RETRIES}) - Terraform plan issues"
+            )
+            return "architect"
+        
+        # Max retries exceeded - proceed to security anyway
+        logger.warning(f"ROUTING: Max retries exceeded on deep validation - proceeding to security")
+        return "security"
+    
+    workflow.add_conditional_edges(
+        "validate_deep",
+        route_from_deep_validation,
+        {
+            "security": "security",
+            "architect": "architect",
         }
     )
     
