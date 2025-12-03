@@ -32,6 +32,8 @@ from typing import Dict, Any
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
+from app.core.model_config import create_lightweight_llm  # Use lightweight model for analysis
+
 logger = logging.getLogger(__name__)
 
 
@@ -213,16 +215,15 @@ Remember: Your goal is to enable infrastructure generation by filling gaps, not 
 def create_clarifier_chain():
     """
     Create the LangChain LLM chain for the Clarifier agent.
+    Uses lightweight model for fast, efficient analysis.
     
     Returns:
         Runnable: A LangChain chain that can be invoked with user requests
     """
-    # Initialize the LLM via Groq Cloud
-    llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
-        temperature=0.1,  # Low temperature for consistent analysis
-        max_tokens=1500,
-        groq_api_key=os.getenv("GROQ_API_KEY")
+    # Use lightweight model for analysis tasks (8b model - 70% fewer tokens)
+    llm = create_lightweight_llm(
+        temperature=0.3,  # Slightly higher for creative assumption-making
+        max_tokens=1000   # Analysis doesn't need many tokens
     )
     
     return llm

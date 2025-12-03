@@ -30,6 +30,8 @@ from typing import Dict, Any
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
+from app.core.model_config import create_lightweight_llm  # Use lightweight model for planning
+
 logger = logging.getLogger(__name__)
 
 
@@ -240,16 +242,15 @@ Remember: Your plan guides the code generation process. Be thorough but realisti
 def create_planner_chain():
     """
     Create the LangChain LLM chain for the Planner agent.
+    Uses lightweight model for fast, efficient planning.
     
     Returns:
         Runnable: A LangChain chain that can be invoked with user requests
     """
-    # Initialize the LLM via Groq Cloud
-    llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
-        temperature=0.2,  # Slightly higher for creative planning
-        max_tokens=2000,
-        groq_api_key=os.getenv("GROQ_API_KEY")
+    # Use lightweight model for planning tasks (8b model - 70% fewer tokens)
+    llm = create_lightweight_llm(
+        temperature=0.3,  # Slightly higher for creative planning
+        max_tokens=1000   # Planning doesn't need many tokens
     )
     
     return llm

@@ -27,8 +27,9 @@ from app.services.finops import get_cost_estimate
 
 logger = logging.getLogger(__name__)
 
-# Maximum number of retry attempts before failing (increased from 3 to 5)
-MAX_RETRIES = 5
+# Maximum number of retry attempts before failing
+# Reduced from 5 to 3 to save API tokens (~40% savings on failed attempts)
+MAX_RETRIES = 3
 
 
 def validator_node(state: AgentState) -> Dict[str, Any]:
@@ -540,6 +541,13 @@ def run_workflow(user_prompt: str) -> AgentState:
             logger.error("✗ WORKFLOW FAILED (Validation Error)")
         else:
             logger.warning("! WORKFLOW COMPLETED WITH WARNINGS")
+        
+        # Log graph data for debugging
+        graph_data = final_state.get("graph_data", {})
+        logger.info(f"📊 Graph Data: {len(graph_data.get('nodes', []))} nodes, {len(graph_data.get('edges', []))} edges")
+        if graph_data.get('nodes'):
+            logger.info(f"   Node sample: {graph_data['nodes'][0] if graph_data['nodes'] else 'none'}")
+        
         logger.info("=" * 70)
         
         return final_state

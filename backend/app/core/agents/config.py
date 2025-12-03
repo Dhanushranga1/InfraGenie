@@ -18,6 +18,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.core.state import AgentState
 from app.core.utils import clean_llm_output
+from app.core.model_config import create_standard_llm  # Use standard model for code generation
 
 logger = logging.getLogger(__name__)
 
@@ -142,16 +143,14 @@ def create_config_chain():
         Runnable: A LangChain chain for Ansible playbook generation
     
     Configuration:
-        - Model: llama-3.3-70b-versatile (via Groq Cloud)
-        - Temperature: 0.2 (slightly higher for creative config)
-        - Max tokens: 2000 (sufficient for playbooks)
+        - Model: Dynamically selected (llama-3.1-70b for code quality)
+        - Temperature: 0.1 (low for consistent YAML generation)
+        - Max tokens: 1500 (sufficient for most playbooks)
     """
-    # Initialize the LLM via Groq Cloud
-    llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
-        temperature=0.2,  # Slightly higher for configuration creativity
-        max_tokens=2000,
-        groq_api_key=os.getenv("GROQ_API_KEY")
+    # Use standard model for code generation (Ansible playbooks are code)
+    llm = create_standard_llm(
+        temperature=0.1,  # Low temperature for consistent YAML
+        max_tokens=1500   # Most playbooks are under 1000 tokens
     )
     
     # Create the prompt template

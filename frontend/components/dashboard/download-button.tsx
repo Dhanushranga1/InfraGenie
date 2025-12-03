@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useProjectStore } from '@/lib/store';
@@ -25,13 +25,36 @@ export function DownloadButton() {
     .filter((m) => m.role === 'user')
     .pop()?.content || 'infrastructure';
 
+  const isDisabled = !terraformCode || !ansiblePlaybook || isDownloading;
+
+  // Debug logging - only when values change
+  useEffect(() => {
+    console.log('[DownloadButton] State updated:', {
+      hasTerraformCode: !!terraformCode,
+      hasAnsiblePlaybook: !!ansiblePlaybook,
+      isDisabled,
+      terraformCodeLength: terraformCode?.length || 0,
+      ansiblePlaybookLength: ansiblePlaybook?.length || 0,
+    });
+  }, [terraformCode, ansiblePlaybook, isDisabled]);
+
   const handleDownload = async () => {
-    if (!terraformCode || !ansiblePlaybook) return;
+    console.log('[Download] Button clicked');
+    console.log('[Download] Terraform code length:', terraformCode?.length);
+    console.log('[Download] Ansible playbook length:', ansiblePlaybook?.length);
+    
+    if (!terraformCode || !ansiblePlaybook) {
+      console.error('[Download] Missing required data');
+      alert('Missing infrastructure code. Please generate infrastructure first.');
+      return;
+    }
 
     setIsDownloading(true);
+    console.log('[Download] Starting download...');
 
     try {
       // Call download API
+      console.log('[Download] Calling API...');
       const blob = await downloadDeploymentKit({
         project_id: `project-${Date.now()}`,
         terraform_code: terraformCode,
@@ -40,26 +63,33 @@ export function DownloadButton() {
         user_prompt: userPrompt,
       });
 
+      console.log('[Download] Received blob:', blob.size, 'bytes');
+
       // Create download link
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = `infragenie-deployment-${Date.now()}.zip`;
       document.body.appendChild(link);
+      console.log('[Download] Triggering download...');
       link.click();
       
       // Cleanup
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Download failed:', error);
-      alert('Failed to download deployment kit. Please try again.');
+      console.log('[Download] Download completed successfully!');
+    } catch (error: any) {
+      console.error('[Download] Failed:', error);
+      console.error('[Download] Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
+      alert(`Failed to download deployment kit: ${error.message || 'Unknown error'}. Check console for details.`);
     } finally {
       setIsDownloading(false);
     }
   };
-
-  const isDisabled = !terraformCode || !ansiblePlaybook || isDownloading;
 
   return (
     <div className="p-4 border-t border-zinc-800 bg-zinc-900/50">

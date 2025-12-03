@@ -12,7 +12,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8
 // Create Axios instance with base configuration
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 300000, // 5 minutes for LLM operations with retries (terraform init, checkov scans)
+  timeout: 600000, // 10 minutes for LLM operations with retries (terraform init can be slow)
   headers: {
     'Content-Type': 'application/json',
   },

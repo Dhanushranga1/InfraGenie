@@ -1,31 +1,32 @@
 /**
  * Terminal Loader Component
  * 
- * Animated terminal-style loading indicator with cycling messages
+ * Animated terminal-style loading indicator synced with workflow stages
  */
 
 "use client";
 
-import { useEffect, useState } from 'react';
 import { Bot } from 'lucide-react';
+import { useProjectStore } from '@/lib/store';
 
-const LOADING_MESSAGES = [
-  '> Architecting solution...',
-  '> Validating Terraform syntax...',
-  '> Scanning security policies...',
-  '> Estimating cloud costs...',
-];
+const STAGE_MESSAGES: Record<string, string> = {
+  clarifier: '> Analyzing requirements...',
+  planner: '> Planning infrastructure components...',
+  architect: '> Generating Terraform code...',
+  validator: '> Validating Terraform syntax...',
+  completeness: '> Checking completeness...',
+  deep_validation: '> Running terraform plan...',
+  security: '> Scanning security policies...',
+  parser: '> Building dependency graph...',
+  finops: '> Estimating cloud costs...',
+  ansible: '> Generating Ansible playbook...',
+};
 
 export function TerminalLoader() {
-  const [messageIndex, setMessageIndex] = useState(0);
-  
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMessageIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
-    }, 2000);
-    
-    return () => clearInterval(interval);
-  }, []);
+  const { workflowStage } = useProjectStore();
+  const currentMessage = workflowStage?.current 
+    ? STAGE_MESSAGES[workflowStage.current] || '> Processing...'
+    : '> Initializing workflow...';
   
   return (
     <div className="flex gap-3 mb-4">
@@ -36,9 +37,16 @@ export function TerminalLoader() {
       
       {/* Terminal Message */}
       <div className="px-4 py-3 rounded-2xl rounded-tl-none bg-zinc-900 border border-zinc-800 max-w-[85%]">
-        <p className="font-mono text-sm text-violet-400 animate-pulse">
-          {LOADING_MESSAGES[messageIndex]}
-        </p>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1">
+            <div className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce [animation-delay:0ms]" />
+            <div className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce [animation-delay:150ms]" />
+            <div className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce [animation-delay:300ms]" />
+          </div>
+          <p className="font-mono text-sm text-violet-400">
+            {currentMessage}
+          </p>
+        </div>
       </div>
     </div>
   );

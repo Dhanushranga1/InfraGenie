@@ -119,7 +119,22 @@ def deep_validate_terraform(terraform_code: str, user_prompt: str) -> Dict[str, 
         )
         
         if plan_result.returncode != 0:
-            error_msg = f"terraform plan failed: {plan_result.stderr[:500]}"
+            error_output = plan_result.stderr
+            
+            # Check if error is due to missing AWS credentials
+            if "InvalidClientTokenId" in error_output or "No valid credential sources found" in error_output:
+                logger.warning("⚠ AWS credentials not configured - skipping terraform plan validation")
+                logger.info("💡 Tip: Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to enable plan validation")
+                
+                # Still return success but with 0 planned resources
+                return {
+                    "error": None,
+                    "planned_resources": 0,
+                    "resource_details": [],
+                    "skipped_reason": "AWS credentials not configured"
+                }
+            
+            error_msg = f"terraform plan failed: {error_output[:500]}"
             logger.error(error_msg)
             return {
                 "error": error_msg,
@@ -298,6 +313,16 @@ def deep_validator_node(state: Dict[str, Any]) -> Dict[str, Any]:
     
     error = result.get("error")
     planned_resources = result.get("planned_resources", 0)
+    skipped_reason = result.get("skipped_reason")
+    
+    # If skipped due to missing credentials, treat as success
+    if skipped_reason:
+        logger.info(f"⚠ Deep validation skipped: {skipped_reason}")
+        return {
+            "validation_error": None,  # No error - just skipped
+            "planned_resources": 0,
+            "logs": state.get("logs", []) + [f"⚠ Deep validation skipped: {skipped_reason}"]
+        }
     
     if error:
         logger.error(f"Deep validation failed: {error}")

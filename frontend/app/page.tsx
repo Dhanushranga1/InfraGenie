@@ -6,6 +6,7 @@ import { ArchitectureDiagram } from '@/components/diagram/architecture-diagram';
 import { StatusBadges } from '@/components/dashboard/status-badges';
 import { SecurityPanel } from '@/components/dashboard/security-panel';
 import { DownloadButton } from '@/components/dashboard/download-button';
+import { WorkflowVisualizer } from '@/components/workflow/workflow-visualizer';
 
 export default function HomePage() {
   return (
@@ -13,10 +14,10 @@ export default function HomePage() {
       {/* Navigation Bar */}
       <Navbar />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-row overflow-hidden">
+      {/* Main Content Area - with padding for workflow visualizer */}
+      <div className="flex-1 flex flex-row overflow-hidden pb-32">
         {/* Left Panel - Chat Interface */}
-        <div className="w-[350px] min-w-[350px] border-r border-zinc-800 bg-zinc-900/50 backdrop-blur-xl flex flex-col">
+        <div className="w-[400px] min-w-[400px] border-r border-zinc-800 bg-zinc-900/50 backdrop-blur-xl flex flex-col">
           <div className="p-6 border-b border-zinc-800">
             <h2 className="text-lg font-bold text-violet-400 font-mono tracking-tight">
               Chat Interface
@@ -74,6 +75,9 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* Workflow Visualizer - Fixed at bottom */}
+      <WorkflowVisualizer />
     </div>
   );
 }

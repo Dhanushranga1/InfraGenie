@@ -178,7 +178,11 @@ async def generate_infrastructure(request: GenerateRequest) -> GenerateResponse:
             assumptions=result.get("assumptions", {})
         )
         
+        # Log response data for debugging
         logger.info(f"Workflow completed. Success: {response.success}")
+        logger.info(f"📦 Sending response with: terraform_code={len(response.terraform_code)} chars, "
+                   f"graph_data={len(response.graph_data.get('nodes', []))} nodes, "
+                   f"{len(response.graph_data.get('edges', []))} edges")
         
         return response
     

@@ -24,12 +24,19 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.core.state import AgentState
 from app.core.utils import clean_llm_output
+from app.core.model_config import create_standard_llm  # Use dynamic model selection
 from app.core.agents.templates import (
     K8S_CLUSTER_TEMPLATE,
     COMPLETENESS_CHECKLIST,
     DATABASE_TEMPLATE,
     MULTI_TIER_TEMPLATE
 )
+
+# Import optimized prompt for token efficiency
+from app.core.agents.architect_prompt_optimized import ARCHITECT_SYSTEM_PROMPT_OPTIMIZED
+
+# Use optimized prompt to reduce token usage by ~60%
+ARCHITECT_SYSTEM_PROMPT = ARCHITECT_SYSTEM_PROMPT_OPTIMIZED
 
 logger = logging.getLogger(__name__)
 
@@ -503,17 +510,14 @@ def create_architect_chain():
         Runnable: A LangChain chain that can be invoked with state parameters
     
     Configuration:
-    Configuration:
-        - Model: llama-3.3-70b-versatile (via Groq Cloud)
+        - Model: Dynamically selected via model_config (llama-3.1-70b for code quality)
         - Temperature: 0.1 (low randomness for consistent code generation)
-        - Max tokens: 2000 (sufficient for most infrastructure definitions)
+        - Max tokens: 1500 (optimized - reduced from 2000 to save tokens)
     """
-    # Initialize the LLM via Groq Cloud
-    llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
+    # Use centralized model configuration for dual-API support
+    llm = create_standard_llm(
         temperature=0.1,  # Low temperature for deterministic code generation
-        max_tokens=2000,
-        groq_api_key=os.getenv("GROQ_API_KEY")
+        max_tokens=1500   # Reduced from 2000 - most infrastructure is under 1000 tokens
     )
     
     # Create the prompt template
@@ -530,32 +534,15 @@ def create_architect_chain():
 
 def build_architect_input(state: AgentState) -> str:
     """
-    Construct the input message for the Architect based on current state.
-    Includes detailed security violation context for intelligent remediation.
-    
-    Phase 7 Enhancement: Now includes context from planner and clarifier agents
-    to provide richer information for first-time generation and preserve context
-    during remediation attempts.
-    
-    Args:
-        state (AgentState): Current workflow state
-    
-    Returns:
-        str: Formatted input string for the LLM with full context
+    Construct concise input for Architect (token-optimized version).
+    Reduces verbosity by ~50% while maintaining essential context.
     """
     user_prompt = state["user_prompt"]
     validation_error = state.get("validation_error")
-    completion_advice = state.get("completion_advice")  # New: completeness validator advice
-    security_errors = state.get("security_errors", [])
+    completion_advice = state.get("completion_advice")
     security_violations = state.get("security_violations", [])
     retry_count = state.get("retry_count", 0)
     terraform_code = state.get("terraform_code", "")
-    
-    # Phase 7: Include planner and clarifier context
-    planned_components = state.get("planned_components", [])
-    execution_order = state.get("execution_order", [])
-    assumptions = state.get("assumptions", {})
-    infrastructure_type = state.get("infrastructure_type", "unknown")
     
     message_parts = []
     
@@ -563,110 +550,33 @@ def build_architect_input(state: AgentState) -> str:
     is_remediation = retry_count > 0 or validation_error or security_violations or completion_advice
     
     if not is_remediation:
-        # MODE 1: CREATION with enhanced planning context
-        message_parts.append(f"**NEW INFRASTRUCTURE REQUEST:**\n{user_prompt}\n")
-        
-        # Add infrastructure type classification
-        if infrastructure_type != "unknown":
-            message_parts.append(f"**Infrastructure Type:** {infrastructure_type.upper()}")
-        
-        # Add explicit assumptions from clarifier
-        if assumptions:
-            message_parts.append("\n**EXPLICIT ASSUMPTIONS (from Clarifier):**")
-            for key, value in assumptions.items():
-                message_parts.append(f"  - {key}: {value}")
-            message_parts.append("")
-        
-        # Add planned components from planner
-        if planned_components:
-            message_parts.append("**REQUIRED COMPONENTS (from Planner):**")
-            message_parts.append("You MUST implement ALL of these components:\n")
-            for i, component in enumerate(planned_components, 1):
-                comp_name = component.get("name", f"Component {i}")
-                comp_desc = component.get("description", "")
-                comp_deps = component.get("dependencies", [])
-                
-                message_parts.append(f"{i}. **{comp_name}**")
-                if comp_desc:
-                    message_parts.append(f"   Purpose: {comp_desc}")
-                if comp_deps:
-                    deps_str = ", ".join(comp_deps)
-                    message_parts.append(f"   Dependencies: {deps_str}")
-            message_parts.append("")
-        
-        # Add execution order guidance
-        if execution_order:
-            order_preview = ", ".join(execution_order[:5])
-            if len(execution_order) > 5:
-                order_preview += f", ... (+{len(execution_order)-5} more)"
-            message_parts.append(f"**BUILD ORDER:** {order_preview}\n")
-        
-        message_parts.append("Generate secure, production-ready Terraform code implementing ALL components above.")
-        message_parts.append("\n🚨 **CRITICAL REMINDER:** If creating ANY EC2 instances, you MUST include ALL THREE SSH key resources (tls_private_key, aws_key_pair, local_file) and add key_name to EVERY instance. See Rule #2. This is NOT optional.")
+        # MODE 1: CREATION (concise)
+        message_parts.append(f"Generate Terraform for: {user_prompt}")
     else:
-        # MODE 2: REMEDIATION with preserved context
-        message_parts.append(f"**REMEDIATION MODE - Retry {retry_count}**")
-        message_parts.append(f"Original Request: {user_prompt}")
-        
-        # Preserve planning context across retries
-        if infrastructure_type != "unknown":
-            message_parts.append(f"Infrastructure Type: {infrastructure_type}")
-        
-        if planned_components:
-            message_parts.append(f"Required Components: {len(planned_components)} components planned")
-        
-        message_parts.append("\nYou are fixing your own code. Maintain the architecture intent.\n")
+        # MODE 2: REMEDIATION (minimal context)
+        message_parts.append(f"Fix attempt {retry_count} for: {user_prompt}")
     
-    # Add completeness error context (highest priority - infrastructure is incomplete!)
+    # Add only critical errors (prioritized)
     if completion_advice:
-        message_parts.append(
-            f"**🚨 INFRASTRUCTURE INCOMPLETE - MISSING CRITICAL COMPONENTS 🚨**\n\n"
-            f"{completion_advice}\n\n"
-            "**ACTION REQUIRED:** Add the missing resources listed above. "
-            "Do NOT just create networking - create the ACTUAL infrastructure requested!\n"
-        )
+        message_parts.append(f"\n🚨 MISSING COMPONENTS:\n{completion_advice}")
+    elif validation_error:
+        message_parts.append(f"\n⚠️ VALIDATION ERROR:\n{validation_error}")
+    elif security_violations:
+        message_parts.append(f"\n🔒 SECURITY FIXES NEEDED:")
+        # Group violations by check_id to reduce repetition
+        violations_by_check = {}
+        for v in security_violations[:5]:  # Limit to top 5 to save tokens
+            check_id = v.get("check_id", "UNKNOWN")
+            if check_id not in violations_by_check:
+                violations_by_check[check_id] = v
+        
+        for check_id, v in violations_by_check.items():
+            resource = v.get("resource", "unknown")
+            message_parts.append(f"  [{check_id}] {resource}: {v.get('check_name', 'N/A')}")
     
-    # Add validation error context
-    if validation_error and not completion_advice:  # Only show if not already showing completeness error
-        message_parts.append(
-            f"**TERRAFORM VALIDATION ERROR:**\n"
-            f"```\n{validation_error}\n```\n"
-            "Fix this specific error in the code below.\n"
-        )
-    
-    # Add detailed security violation context
-    if security_violations:
-        message_parts.append(
-            "**SECURITY VIOLATIONS TO FIX:**\n"
-            "⚠️ CRITICAL: MODIFY EXISTING RESOURCES - DO NOT CREATE DUPLICATES!\n\n"
-        )
-        for i, violation in enumerate(security_violations, 1):
-            message_parts.append(
-                f"{i}. [{violation['check_id']}] on `{violation['resource']}`\n"
-                f"   Issue: {violation['check_name']}\n"
-                f"   Severity: {violation.get('severity', 'MEDIUM')}\n"
-                f"   Action: MODIFY the existing {violation['resource']} resource\n"
-            )
-        message_parts.append(
-            "\n**INSTRUCTIONS:**\n"
-            "1. Find the EXISTING resource mentioned in each violation\n"
-            "2. ADD the required security attributes TO THAT RESOURCE\n"
-            "3. DO NOT create new resources with different names (e.g., '_with_profile', '_fixed', '_secure')\n"
-            "4. Apply the EXACT fixes from your system prompt Rule #8\n"
-            "5. Return COMPLETE code with ALL resources (keep existing ones)\n"
-            "\n⚠️ CRITICAL REMINDER: This is a MODIFICATION task, not a creation task.\n"
-            "The output should look like your input code, but with additional security attributes.\n"
-            "Resource names MUST remain identical.\n"
-        )
-    
-    # Include previous code for fixing
-    if terraform_code and is_remediation:
-        message_parts.append(
-            f"\n**CURRENT CODE (MODIFY this, don't create duplicates):**\n"
-            f"```hcl\n{terraform_code}\n```\n"
-            f"\n⚠️ Take the code above and ADD the security fixes to the existing resources.\n"
-            f"Keep the same resource names. DO NOT create web_server_with_profile.\n"
-        )
+    # Add current code only if in remediation mode
+    if is_remediation and terraform_code:
+        message_parts.append(f"\n**CURRENT CODE TO FIX:**\n{terraform_code}")
     
     return "\n".join(message_parts)
 

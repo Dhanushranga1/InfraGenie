@@ -9,7 +9,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Send } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { MessageBubble } from './message-bubble';
@@ -22,7 +21,46 @@ export function ChatInterface() {
   const scrollRef = useRef<HTMLDivElement>(null);
   
   // Zustand store
-  const { messages, isLoading, setLoading, setProjectData, addMessage } = useProjectStore();
+  const { messages, isLoading, setLoading, setProjectData, addMessage, setWorkflowStage, setWorkflowError } = useProjectStore();
+  
+  // Simulate workflow stages during loading
+  useEffect(() => {
+    if (!isLoading) {
+      setWorkflowStage('', 'complete'); // Reset
+      return;
+    }
+
+    const stages = [
+      { name: 'clarifier', delay: 1000 },
+      { name: 'planner', delay: 3000 },
+      { name: 'architect', delay: 8000 },
+      { name: 'validator', delay: 12000 },
+      { name: 'completeness', delay: 14000 },
+      { name: 'deep_validation', delay: 18000 },
+      { name: 'security', delay: 22000 },
+      { name: 'parser', delay: 24000 },
+      { name: 'finops', delay: 27000 },
+      { name: 'ansible', delay: 30000 },
+    ];
+
+    const timeouts: NodeJS.Timeout[] = [];
+
+    stages.forEach(({ name, delay }) => {
+      const timeout = setTimeout(() => {
+        setWorkflowStage(name, 'active');
+        // Mark previous as complete
+        const prevIndex = stages.findIndex(s => s.name === name) - 1;
+        if (prevIndex >= 0) {
+          setWorkflowStage(stages[prevIndex].name, 'complete');
+        }
+      }, delay);
+      timeouts.push(timeout);
+    });
+
+    return () => {
+      timeouts.forEach(clearTimeout);
+    };
+  }, [isLoading, setWorkflowStage]);
   
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -36,8 +74,25 @@ export function ChatInterface() {
     mutationFn: generateInfrastructure,
     onMutate: () => {
       setLoading(true);
+      setWorkflowStage('clarifier', 'active');
+      setWorkflowError(null);
     },
     onSuccess: (data) => {
+      console.log('[ChatInterface] Received data from API:', {
+        hasTerraformCode: !!data.terraform_code,
+        terraformCodeLength: data.terraform_code?.length || 0,
+        hasAnsiblePlaybook: !!data.ansible_playbook,
+        ansiblePlaybookLength: data.ansible_playbook?.length || 0,
+        hasCostEstimate: !!data.cost_estimate,
+        hasGraphData: !!data.graph_data,
+        graphNodes: data.graph_data?.nodes?.length || 0,
+        graphEdges: data.graph_data?.edges?.length || 0,
+      });
+      
+      // Mark all stages as complete
+      const allStages = ['clarifier', 'planner', 'architect', 'validator', 'completeness', 'deep_validation', 'security', 'parser', 'finops', 'ansible'];
+      allStages.forEach(stage => setWorkflowStage(stage, 'complete'));
+      
       // Update global store with infrastructure data
       setProjectData({
         terraformCode: data.terraform_code,
@@ -47,17 +102,51 @@ export function ChatInterface() {
         graphData: data.graph_data,
       });
       
-      // Add AI response to chat
-      const responseText = data.is_clean
-        ? `✅ Infrastructure generated successfully!\n\n**Cost Estimate:** ${data.cost_estimate}\n**Security:** No critical issues found\n\nYour Terraform and Ansible code are ready for deployment.`
-        : `⚠️ Infrastructure generated with warnings.\n\n**Cost Estimate:** ${data.cost_estimate}\n**Security Issues:** ${data.security_errors.length} found\n\nPlease review the security risks before deployment.`;
+      console.log('[ChatInterface] Updated store with data');
+      
+      // Verify store was actually updated
+      setTimeout(() => {
+        const currentState = useProjectStore.getState();
+        console.log('[ChatInterface] Store verification after 100ms:', {
+          hasTerraformInStore: !!currentState.terraformCode,
+          terraformLength: currentState.terraformCode?.length || 0,
+          hasGraphDataInStore: !!currentState.graphData,
+          graphNodesInStore: currentState.graphData?.nodes?.length || 0,
+          graphEdgesInStore: currentState.graphData?.edges?.length || 0,
+        });
+      }, 100);
+      
+      // Add AI response to chat with better error context
+      let responseText: string;
+      
+      if (data.validation_error) {
+        // Workflow failed - explain why download/diagram won't work
+        responseText = `❌ **Infrastructure Generation Failed**\n\n${data.validation_error}\n\n⚠️ **Note:** The download button and architecture diagram will not be available because the workflow did not complete successfully.`;
+      } else if (data.is_clean) {
+        responseText = `✅ Infrastructure generated successfully!\n\n**Cost Estimate:** ${data.cost_estimate}\n**Security:** No critical issues found\n\nYour Terraform and Ansible code are ready for deployment.`;
+      } else {
+        responseText = `⚠️ Infrastructure generated with warnings.\n\n**Cost Estimate:** ${data.cost_estimate}\n**Security Issues:** ${data.security_errors.length} found\n\nPlease review the security risks before deployment.`;
+      }
       
       addMessage('ai', responseText);
       setLoading(false);
     },
     onError: (error: any) => {
-      const errorMessage = error.response?.data?.detail || error.message || 'Failed to generate infrastructure';
-      addMessage('ai', `❌ Error: ${errorMessage}\n\nPlease try again or refine your prompt.`);
+      const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
+      const isRateLimit = error.response?.data?.detail?.includes('Rate limit') || 
+                          error.response?.data?.detail?.includes('rate_limit');
+      const errorDetail = error.response?.data?.detail || error.message || 'Failed to generate infrastructure';
+      
+      if (isRateLimit) {
+        setWorkflowError('API rate limit exceeded');
+        addMessage('ai', `🚫 **API Rate Limit Exceeded**\n\nYour Groq API has hit its daily token limit. Please:\n\n1. Wait for the limit to reset (~46 minutes)\n2. Or use a different API key in the backend .env file\n3. Or upgrade your Groq tier at https://console.groq.com/settings/billing\n\n**Error:** ${errorDetail}`);
+      } else if (isTimeout) {
+        setWorkflowError('Request timeout - infrastructure generation took too long. This can happen with complex requests or slow network.');
+        addMessage('ai', `⏱️ **Timeout Error**\n\nThe infrastructure generation took longer than expected (>10 minutes). This can happen when:\n- Terraform init downloads large providers\n- Deep validation runs multiple times\n- Network is slow\n\n**Try:**\n- Simplifying your request\n- Checking your internet connection\n- Retrying in a moment`);
+      } else {
+        setWorkflowError(errorDetail);
+        addMessage('ai', `❌ Error: ${errorDetail}\n\nPlease try again or refine your prompt.`);
+      }
       setLoading(false);
     },
   });
@@ -80,7 +169,7 @@ export function ChatInterface() {
   return (
     <div className="h-full flex flex-col relative">
       {/* Message List */}
-      <ScrollArea className="flex-1 p-6" ref={scrollRef}>
+      <div className="flex-1 overflow-y-auto p-6" ref={scrollRef}>
         <div className="space-y-4">
           {messages.length === 0 && (
             <div className="text-center py-12 space-y-4">
@@ -120,7 +209,7 @@ export function ChatInterface() {
           {/* Terminal Loader */}
           {isLoading && <TerminalLoader />}
         </div>
-      </ScrollArea>
+      </div>
       
       {/* Input Area */}
       <div className="border-t border-zinc-800 bg-zinc-900/50 backdrop-blur-xl p-4">

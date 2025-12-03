@@ -19,6 +19,13 @@ interface ProjectState {
   securityRisks: string[];
   graphData: any;
   
+  // Workflow tracking
+  workflowStage: {
+    current: string | null;
+    [key: string]: string | null;
+  } | null;
+  workflowError: string | null;
+  
   // Chat history
   messages: Array<{
     id: string;
@@ -36,6 +43,8 @@ interface ProjectState {
   securityRisks?: string[];
   graphData?: any;
   }) => void;
+  setWorkflowStage: (stage: string, status?: 'active' | 'complete' | 'error') => void;
+  setWorkflowError: (error: string | null) => void;
   addMessage: (role: 'user' | 'ai', content: string) => void;
   clearProject: () => void;
 }
@@ -50,6 +59,8 @@ export const useProjectStore = create<ProjectState>((set) => ({
   graphData: null,
   selectedNodeId: null,
   messages: [],
+  workflowStage: null,
+  workflowError: null,
   
   // Actions
   setLoading: (loading) => set({ isLoading: loading }),
@@ -62,6 +73,16 @@ export const useProjectStore = create<ProjectState>((set) => ({
   securityRisks: data.securityRisks ?? state.securityRisks,
   graphData: data.graphData ?? state.graphData,
   })),
+  
+  setWorkflowStage: (stage, status = 'active') => set((state) => ({
+    workflowStage: {
+      ...state.workflowStage,
+      current: status === 'active' ? stage : state.workflowStage?.current || null,
+      [stage]: status,
+    },
+  })),
+  
+  setWorkflowError: (error) => set({ workflowError: error }),
   
   addMessage: (role, content) => set((state) => ({
     messages: [
@@ -82,5 +103,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
     costEstimate: null,
     securityRisks: [],
     messages: [],
+    workflowStage: null,
+    workflowError: null,
   }),
 }));

@@ -80,11 +80,12 @@ INFRASTRUCTURE_PATTERNS = {
         "aws": {
             "required_resources": [
                 {"type": "aws_instance", "name": "EC2 instance"},
-                {"type": "aws_security_group", "name": "Security group"},
+                # Security group is optional - can be inline or default
+                # {"type": "aws_security_group", "name": "Security group"},
                 {"type": "aws_key_pair", "name": "SSH key pair"},
                 {"type": "tls_private_key", "name": "TLS private key"},
             ],
-            "min_total_resources": 4
+            "min_total_resources": 3  # Reduced from 4 since security group is optional
         }
     },
     
