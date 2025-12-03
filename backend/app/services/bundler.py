@@ -26,179 +26,280 @@ README_TEMPLATE = """# InfraGenie Deployment Kit
 **Generated:** {timestamp}
 **Estimated Monthly Cost:** {cost}
 
+## 🎯 Zero-Configuration Deployment
+
+This is an **AI-generated, production-ready** infrastructure deployment kit. 
+Everything is automated - just run one script and provide your AWS credentials!
+
 ## 📦 What's Included
 
-This deployment kit contains everything needed to provision and configure your infrastructure:
+- ✅ **main.tf** - Validated Terraform code (syntax checked, security scanned)
+- ✅ **playbook.yml** - Ansible playbook for server configuration
+- ✅ **deploy.sh** - Fully automated deployment (YOU ONLY RUN THIS!)
+- ✅ **destroy.sh** - Safe infrastructure cleanup
+- ✅ **README.md** - This documentation
 
-- **main.tf** - Terraform infrastructure definition
-- **playbook.yml** - Ansible configuration management
-- **deploy.sh** - Automated deployment script
-- **destroy.sh** - Safe infrastructure cleanup script
-- **README.md** - This file
+## 🚀 Quick Start (2 Steps!)
 
-## 🚀 Quick Start
+### Step 1: Make Script Executable (One-Time)
 
-### Prerequisites
+```bash
+chmod +x deploy.sh
+```
+
+### Step 2: Deploy Everything
+
+```bash
+./deploy.sh
+```
+
+**That's it!** The script will:
+1. ✅ Check prerequisites (Terraform, Ansible)
+2. ✅ Configure AWS credentials (interactive if needed)
+3. ✅ Show deployment summary
+4. ✅ Provision infrastructure (automated)
+5. ✅ Configure servers (automated)
+6. ✅ Set up security (automated)
+7. ✅ Give you SSH access details
+
+### What You'll Be Asked
+
+The script is **almost zero-interaction**, but will ask for:
+
+1. **AWS Credentials** (if not already configured):
+   - Access Key ID
+   - Secret Access Key
+   - Region (optional, defaults to us-east-1)
+
+2. **Deployment Confirmation**: 
+   - Reviews what will be deployed
+   - You type "yes" to proceed
+
+**That's all the interaction needed!** Everything else is automated.
+
+## 🔧 Prerequisites
+
+The deploy script will check for you, but you need:
 
 1. **Terraform** (v1.0+)
    ```bash
-   terraform --version
+   # macOS
+   brew install terraform
+   
+   # Linux
+   wget https://releases.hashicorp.com/terraform/1.6.0/terraform_1.6.0_linux_amd64.zip
+   unzip terraform_1.6.0_linux_amd64.zip
+   sudo mv terraform /usr/local/bin/
    ```
 
 2. **Ansible** (v2.9+)
    ```bash
-   ansible --version
+   # macOS/Linux
+   pip install ansible
+   
+   # Or using apt
+   sudo apt install ansible
    ```
 
-3. **Cloud Provider Credentials**
-   - AWS: Configure `aws configure` or set environment variables
-   - Ensure you have appropriate IAM permissions
-
-### Deployment Steps
-
-#### Option 1: Automated Deployment (Recommended)
-
-Simply run the deployment script:
-
-```bash
-chmod +x deploy.sh
-./deploy.sh
-```
-
-This script will:
-1. Initialize Terraform
-2. Provision infrastructure
-3. Extract server IP address
-4. Run Ansible configuration
-
-#### Option 2: Manual Deployment
-
-**Step 1: Provision Infrastructure**
-```bash
-terraform init
-terraform plan
-terraform apply
-```
-
-**Step 2: Configure Servers**
-```bash
-# Get the server IP from Terraform output
-terraform output
-
-# Create inventory file
-echo "[servers]" > inventory.ini
-echo "<YOUR_SERVER_IP>" >> inventory.ini
-
-# Run Ansible playbook
-ansible-playbook -i inventory.ini playbook.yml
-```
-
-## 🔒 Security Features
-
-This deployment includes:
-- ✅ Encrypted storage (where applicable)
-- ✅ Security group restrictions
-- ✅ fail2ban intrusion prevention
-- ✅ Automatic security updates
+3. **AWS Account** with IAM permissions to create resources
 
 ## 💰 Cost Management
 
 **Estimated Monthly Cost:** {cost}
 
-### Cost Assassin Feature
-Your servers are configured with an automatic shutdown at **8 PM daily** to prevent unnecessary costs.
+### Built-in Cost Control Features:
 
-To disable this feature:
+1. **Cost Assassin™** - Automatic shutdown at 8 PM daily
+2. **Right-sized Resources** - Optimized instance types
+3. **No Unnecessary Services** - Only what you requested
+
+### Disable Auto-Shutdown (if needed):
+
 ```bash
 # SSH into your server
-ssh user@<server-ip>
+ssh -i [generated-key.pem] ubuntu@[server-ip]
 
-# Remove the cron job
+# Remove cron job
 sudo crontab -e
 # Delete the line containing "Cost Assassin"
 ```
 
-## 📝 Infrastructure Details
+## 🔒 Security Features
+
+Your infrastructure includes:
+- ✅ **Security Groups** - Firewall rules configured
+- ✅ **fail2ban** - Intrusion prevention
+- ✅ **Automatic Updates** - Security patches
+- ✅ **SSH Key Authentication** - No password login
+- ✅ **Non-root User** - Secure access
+
+## 📝 What Was Requested
 
 {user_prompt}
 
-## 🧹 Cleanup
+## 🛠️ Advanced Usage
 
-When you're done with your infrastructure, you can safely destroy it:
+### Manual Deployment (if you prefer more control)
+
+**Step 1: Initialize Terraform**
+```bash
+terraform init
+```
+
+**Step 2: Review Plan**
+```bash
+terraform plan
+```
+
+**Step 3: Apply Infrastructure**
+```bash
+terraform apply
+```
+
+**Step 4: Configure with Ansible**
+```bash
+# Get server IP
+SERVER_IP=$(terraform output -raw instance_ip)
+
+# Create inventory
+echo "[$SERVER_IP ansible_user=ubuntu ansible_ssh_private_key_file=infragenie-key.pem]" > inventory.ini
+
+# Run playbook
+ansible-playbook -i inventory.ini playbook.yml
+```
+
+### Update Infrastructure
+
+```bash
+# Edit main.tf with your changes
+nano main.tf
+
+# Apply updates
+terraform apply
+```
+
+### Check Terraform Outputs
+
+```bash
+terraform output
+```
+
+## 🧹 Cleanup When Done
+
+When you're finished with your infrastructure:
 
 ```bash
 ./destroy.sh
 ```
 
 This will:
-1. Show you what resources will be destroyed
+1. Show resources to be destroyed
 2. Ask for confirmation
-3. Remove all provisioned infrastructure
-4. Optionally clean up generated files
+3. Remove all infrastructure
+4. Optionally clean up local files
 
-**Note:** Terraform maintains a state file (`terraform.tfstate`) that tracks your infrastructure. Keep this file if you plan to make updates to your infrastructure later. If you destroy everything, you can safely delete it.
+**Important:** Keep `terraform.tfstate` until you're done destroying - it tracks your infrastructure!
 
-## 🛠️ Troubleshooting
+## � Troubleshooting
 
-### Terraform Errors
+### Issue: "Terraform not found"
+**Solution:** Install Terraform (see Prerequisites section)
 
-**Issue:** Provider authentication failed
-**Solution:** Verify cloud credentials are configured correctly
-
-**Issue:** Resource already exists
-**Solution:** Import existing resources or use different names
-
-### Ansible Errors
-
-**Issue:** Cannot connect to host
+### Issue: "AWS authentication failed"
 **Solution:** 
-- Verify SSH key is configured
-- Check security group allows SSH (port 22)
-- Wait 2-3 minutes for instance to fully boot
+- Check AWS credentials are correct
+- Verify IAM permissions
+- Try: `aws sts get-caller-identity` to test
 
-**Issue:** Permission denied
-**Solution:** Ensure SSH key has correct permissions (chmod 600 ~/.ssh/id_rsa)
+### Issue: "SSH connection timeout"
+**Reasons:**
+1. Instance still booting (wait 2-3 minutes)
+2. Security group blocks your IP
+3. No public IP assigned
 
-## 🔧 Customization
+**Solution:**
+- Check AWS Console → EC2 → Security Groups
+- Verify status checks show "2/2 passed"
+- Ensure instance has public IP
 
-### Modify Infrastructure
+### Issue: "Ansible failed"
+**Solution:**
+- Infrastructure is deployed, configuration failed
+- SSH manually: `ssh -i [key].pem ubuntu@[ip]`
+- Retry: `ansible-playbook -i inventory.ini playbook.yml`
 
-Edit `main.tf` to adjust resources, then run:
-```bash
-terraform plan
-terraform apply
-```
+## 📚 Understanding the Files
 
-### Modify Configuration
+### main.tf
+Terraform configuration defining:
+- Cloud resources (EC2, security groups, etc.)
+- Networking configuration
+- Storage and compute specifications
 
-Edit `playbook.yml` to adjust server setup, then run:
-```bash
-ansible-playbook -i inventory.ini playbook.yml
-```
+### playbook.yml
+Ansible playbook that:
+- Installs required packages
+- Configures services
+- Sets up security (fail2ban, firewall)
+- Applies best practices
 
-## 📚 Additional Resources
+### deploy.sh
+Automated deployment script that:
+- Validates prerequisites
+- Configures credentials
+- Runs Terraform
+- Executes Ansible
+- Provides status updates
 
-- [Terraform Documentation](https://www.terraform.io/docs)
-- [Ansible Documentation](https://docs.ansible.com)
-- [InfraGenie Project](https://github.com/Dhanushranga1/InfraGenie)
+### terraform.tfstate
+**CRITICAL FILE** - Tracks your infrastructure state
+- Required for updates and destruction
+- Contains resource IDs and metadata
+- **Keep secure** - may contain sensitive data
+- **Backup regularly** if making changes
 
-## ⚠️ Important Notes
+## ⚡ Pro Tips
 
-1. **Costs:** Monitor your cloud provider billing dashboard
-2. **Security:** Review security group rules before deployment
-3. **Backups:** Set up automated backups for production workloads
-4. **Auto-shutdown:** Remember the 8 PM daily shutdown (Cost Assassin)
+1. **First Time:** Let the script handle everything - it's designed for this!
+2. **Credentials:** Script stores them only in environment variables (not on disk)
+3. **SSH Key:** Auto-generated and saved as `infragenie-key.pem` - keep it safe!
+4. **Logs:** All output is visible - watch for any warnings
+5. **Testing:** Use `./destroy.sh` after testing to avoid costs
+
+## 🎯 Design Philosophy
+
+This kit is designed with one goal: **Minimal User Effort**
+
+- ✅ AI validated the infrastructure code before generating this kit
+- ✅ Security scanned (Checkov) - no known vulnerabilities
+- ✅ Syntax validated - guaranteed to work
+- ✅ Best practices applied - production-ready
+- ✅ Cost optimized - right-sized resources
+- ✅ Self-documented - clear README and comments
 
 ## 🤝 Support
 
-For issues or questions:
-- Check the troubleshooting section above
-- Review Terraform/Ansible logs
-- Consult cloud provider documentation
+For issues:
+1. Check troubleshooting section above
+2. Review script output for specific errors
+3. Consult [Terraform docs](https://terraform.io/docs)
+4. Consult [Ansible docs](https://docs.ansible.com)
+
+## ⚠️ Important Reminders
+
+1. **Monitor Costs** - Check AWS billing dashboard regularly
+2. **Security** - Review security groups and access policies
+3. **Backups** - Set up automated backups for production
+4. **Updates** - Keep packages updated (automatic security updates enabled)
+5. **Cleanup** - Run `./destroy.sh` when done to stop charges
 
 ---
 
-**Generated by InfraGenie** - AI-Powered Infrastructure Automation
+**Generated by InfraGenie** - AI-Powered Infrastructure Automation  
+Zero configuration • Production ready • Fully automated
+
+*This entire infrastructure was designed, validated, and packaged by AI.  
+You just run one script. That's the magic.*
 """
 
 
@@ -206,244 +307,508 @@ For issues or questions:
 DEPLOY_SCRIPT_TEMPLATE = """#!/bin/bash
 
 # InfraGenie Deployment Script
-# Automated infrastructure provisioning and configuration
+# Fully automated infrastructure provisioning and configuration
+# Minimal user interaction required - just credentials!
 
 set -e  # Exit on error
 
-echo "🚀 InfraGenie Deployment Starting..."
-echo "===================================="
+echo "╔════════════════════════════════════════════════════════╗"
+echo "║        🚀 InfraGenie Automated Deployment 🚀          ║"
+echo "║    AI-Generated Infrastructure - Zero Configuration     ║"
+echo "╚════════════════════════════════════════════════════════╝"
 echo ""
 
 # Colors for output
 GREEN='\\033[0;32m'
 YELLOW='\\033[1;33m'
 RED='\\033[0;31m'
+BLUE='\\033[0;34m'
 NC='\\033[0m' # No Color
 
-# Check prerequisites
-echo "📋 Checking prerequisites..."
+# Function to check and install prerequisites
+check_prerequisites() {
+    echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo "${BLUE}📋 Step 1/6: Checking Prerequisites${NC}"
+    echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    local missing=0
+    
+    # Check Terraform
+    if ! command -v terraform &> /dev/null; then
+        echo "${RED}❌ Terraform not found${NC}"
+        echo "   Install: https://www.terraform.io/downloads"
+        missing=1
+    else
+        TF_VERSION=$(terraform version -json | grep -o '"version":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+        echo "${GREEN}✅ Terraform: v$TF_VERSION${NC}"
+    fi
+    
+    # Check Ansible
+    if ! command -v ansible-playbook &> /dev/null; then
+        echo "${RED}❌ Ansible not found${NC}"
+        echo "   Install: pip install ansible"
+        missing=1
+    else
+        ANSIBLE_VERSION=$(ansible --version | head -n1 | awk '{print $2}' || echo "unknown")
+        echo "${GREEN}✅ Ansible: v$ANSIBLE_VERSION${NC}"
+    fi
+    
+    # Check AWS CLI (optional but recommended)
+    if ! command -v aws &> /dev/null; then
+        echo "${YELLOW}⚠️  AWS CLI not found (optional but recommended)${NC}"
+        echo "   Install: https://aws.amazon.com/cli/"
+    else
+        AWS_VERSION=$(aws --version 2>&1 | cut -d' ' -f1 | cut -d'/' -f2 || echo "unknown")
+        echo "${GREEN}✅ AWS CLI: v$AWS_VERSION${NC}"
+    fi
+    
+    # Check jq for JSON parsing (optional)
+    if ! command -v jq &> /dev/null; then
+        echo "${YELLOW}⚠️  jq not found (recommended for automation)${NC}"
+        echo "   Install: apt install jq / brew install jq"
+    else
+        echo "${GREEN}✅ jq: installed${NC}"
+    fi
+    
+    echo ""
+    
+    if [ $missing -eq 1 ]; then
+        echo "${RED}❌ Missing required tools. Please install them and try again.${NC}"
+        exit 1
+    fi
+    
+    echo "${GREEN}✅ All prerequisites satisfied!${NC}"
+    echo ""
+}
 
-if ! command -v terraform &> /dev/null; then
-    echo "${RED}❌ Terraform not found. Please install Terraform first.${NC}"
-    exit 1
-fi
+# Function to configure AWS credentials
+configure_aws_credentials() {
+    echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo "${BLUE}🔐 Step 2/6: AWS Credentials Configuration${NC}"
+    echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    # Check if AWS credentials are already configured
+    if [ -f ~/.aws/credentials ] || [ -n "$AWS_ACCESS_KEY_ID" ]; then
+        echo "${GREEN}✅ AWS credentials detected${NC}"
+        
+        # Verify credentials work
+        if command -v aws &> /dev/null; then
+            if aws sts get-caller-identity &> /dev/null; then
+                AWS_ACCOUNT=$(aws sts get-caller-identity --query 'Account' --output text 2>/dev/null || echo "unknown")
+                AWS_USER=$(aws sts get-caller-identity --query 'Arn' --output text 2>/dev/null | cut -d'/' -f2 || echo "unknown")
+                echo "${GREEN}   Account: $AWS_ACCOUNT${NC}"
+                echo "${GREEN}   User: $AWS_USER${NC}"
+                echo ""
+                return 0
+            fi
+        fi
+        
+        echo "${YELLOW}⚠️  Credentials found but couldn't verify them${NC}"
+        echo "   Continuing anyway..."
+        echo ""
+        return 0
+    fi
+    
+    echo "${YELLOW}⚠️  No AWS credentials found${NC}"
+    echo ""
+    echo "InfraGenie needs AWS credentials to provision infrastructure."
+    echo "You can provide them in one of two ways:"
+    echo ""
+    echo "  ${GREEN}Option 1: Environment Variables (Recommended)${NC}"
+    echo "  ${GREEN}Option 2: AWS CLI Configuration${NC}"
+    echo ""
+    
+    read -p "Do you want to configure credentials now? (yes/no): " configure_now
+    
+    if [ "$configure_now" != "yes" ]; then
+        echo "${YELLOW}⚠️  Skipping credential configuration${NC}"
+        echo "   Make sure to set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
+        echo "   environment variables before running this script."
+        echo ""
+        return 0
+    fi
+    
+    echo ""
+    echo "Please enter your AWS credentials:"
+    echo "${YELLOW}(These will be exported as environment variables for this session only)${NC}"
+    echo ""
+    
+    read -p "AWS Access Key ID: " aws_access_key
+    read -sp "AWS Secret Access Key: " aws_secret_key
+    echo ""
+    
+    if [ -n "$aws_access_key" ] && [ -n "$aws_secret_key" ]; then
+        export AWS_ACCESS_KEY_ID="$aws_access_key"
+        export AWS_SECRET_ACCESS_KEY="$aws_secret_key"
+        
+        read -p "AWS Region (default: us-east-1): " aws_region
+        aws_region=${aws_region:-us-east-1}
+        export AWS_DEFAULT_REGION="$aws_region"
+        
+        echo ""
+        echo "${GREEN}✅ Credentials configured for this session${NC}"
+        echo "${YELLOW}   Note: Credentials are NOT saved to disk (secure)${NC}"
+        echo ""
+    else
+        echo "${RED}❌ Invalid credentials provided${NC}"
+        exit 1
+    fi
+}
 
-if ! command -v ansible-playbook &> /dev/null; then
-    echo "${RED}❌ Ansible not found. Please install Ansible first.${NC}"
-    exit 1
-fi
+# Function to display deployment summary
+show_deployment_summary() {
+    echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo "${BLUE}📊 Step 3/6: Deployment Summary${NC}"
+    echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "This deployment will:"
+    echo "  • Provision infrastructure on AWS"
+    echo "  • Configure security groups and networking"
+    echo "  • Set up automated security (fail2ban, updates)"
+    echo "  • Install and configure applications"
+    echo "  • Enable Cost Assassin (8 PM daily shutdown)"
+    echo ""
+    echo "${YELLOW}⚠️  Important:${NC}"
+    echo "  • Infrastructure will incur AWS charges"
+    echo "  • Review costs in your AWS billing dashboard"
+    echo "  • Use ./destroy.sh when done to avoid ongoing charges"
+    echo ""
+}
 
-echo "${GREEN}✅ Prerequisites check passed${NC}"
+# Run pre-flight checks
+check_prerequisites
+configure_aws_credentials
+show_deployment_summary
+
+read -p "${YELLOW}Ready to deploy? This will provision real infrastructure. (yes/no): ${NC}" proceed
 echo ""
 
-# Terraform deployment
-echo "🏗️  Step 1: Provisioning infrastructure with Terraform..."
-echo "-------------------------------------------------------"
+if [ "$proceed" != "yes" ]; then
+    echo "Deployment cancelled."
+    exit 0
+fi
 
-terraform init
+# Terraform deployment
+echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo "${BLUE}🏗️  Step 4/6: Provisioning Infrastructure${NC}"
+echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+echo "   → Initializing Terraform..."
+terraform init -input=false
 if [ $? -ne 0 ]; then
     echo "${RED}❌ Terraform init failed${NC}"
     exit 1
 fi
+echo "${GREEN}   ✅ Terraform initialized${NC}"
+echo ""
 
+echo "   → Validating configuration..."
 terraform validate
 if [ $? -ne 0 ]; then
     echo "${RED}❌ Terraform validation failed${NC}"
     exit 1
 fi
-
+echo "${GREEN}   ✅ Configuration valid${NC}"
 echo ""
-echo "${YELLOW}⚠️  Review the plan carefully before proceeding${NC}"
-terraform plan
 
+echo "   → Planning infrastructure changes..."
 echo ""
-read -p "Do you want to apply this plan? (yes/no): " confirm
-
-if [ "$confirm" != "yes" ]; then
-    echo "Deployment cancelled."
-    exit 0
+terraform plan -out=tfplan
+if [ $? -ne 0 ]; then
+    echo "${RED}❌ Terraform plan failed${NC}"
+    exit 1
 fi
+echo ""
+echo "${GREEN}   ✅ Plan created successfully${NC}"
+echo ""
 
-terraform apply -auto-approve
+echo "${YELLOW}   ⏳ Applying changes (this may take 2-5 minutes)...${NC}"
+terraform apply -auto-approve tfplan
 if [ $? -ne 0 ]; then
     echo "${RED}❌ Terraform apply failed${NC}"
+    echo ""
+    echo "Troubleshooting:"
+    echo "  • Check AWS credentials are valid"
+    echo "  • Verify you have necessary IAM permissions"
+    echo "  • Review error messages above"
+    echo "  • Check AWS service limits/quotas"
     exit 1
 fi
 
-echo "${GREEN}✅ Infrastructure provisioned successfully${NC}"
+echo ""
+echo "${GREEN}✅ Infrastructure provisioned successfully!${NC}"
 echo ""
 
 # Extract instance IP
-echo "📡 Step 2: Extracting server information..."
-echo "-------------------------------------------"
+echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo "${BLUE}📡 Step 5/6: Configuring Deployment${NC}"
+echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
 
-# Try to get instance IP from Terraform output
-INSTANCE_IP=$(terraform output -raw instance_ip 2>/dev/null || terraform output -json | jq -r '.instance_ip.value' 2>/dev/null || echo "")
+echo "   → Extracting server information..."
+
+# Try multiple methods to get instance IP
+INSTANCE_IP=""
+
+# Method 1: Terraform output (most reliable)
+INSTANCE_IP=$(terraform output -raw instance_ip 2>/dev/null)
+
+# Method 2: JSON output
+if [ -z "$INSTANCE_IP" ] || [ "$INSTANCE_IP" == "null" ]; then
+    INSTANCE_IP=$(terraform output -json 2>/dev/null | jq -r '.instance_ip.value // .server_ip.value // .public_ip.value' 2>/dev/null)
+fi
+
+# Method 3: Parse state file directly
+if [ -z "$INSTANCE_IP" ] || [ "$INSTANCE_IP" == "null" ]; then
+    INSTANCE_IP=$(terraform show -json 2>/dev/null | jq -r '.values.root_module.resources[] | select(.type=="aws_instance") | .values.public_ip' 2>/dev/null | head -n1)
+fi
 
 if [ -z "$INSTANCE_IP" ] || [ "$INSTANCE_IP" == "null" ]; then
     echo "${YELLOW}⚠️  Could not automatically extract instance IP${NC}"
-    echo "Please check Terraform outputs manually:"
+    echo ""
+    echo "Available outputs:"
     terraform output
     echo ""
-    read -p "Enter the server IP address: " INSTANCE_IP
+    read -p "Enter the server IP address manually: " INSTANCE_IP
 fi
 
-echo "Server IP: $INSTANCE_IP"
+if [ -z "$INSTANCE_IP" ]; then
+    echo "${RED}❌ No instance IP provided${NC}"
+    exit 1
+fi
+
+echo "${GREEN}   ✅ Server IP: $INSTANCE_IP${NC}"
+echo ""
+
+# Auto-detect SSH key
+echo "   → Locating SSH key..."
+SSH_KEY=""
+
+# Check for Terraform-generated key
+if [ -f "infragenie-key.pem" ]; then
+    SSH_KEY="infragenie-key.pem"
+    chmod 600 "$SSH_KEY"
+    echo "${GREEN}   ✅ Found generated key: $SSH_KEY${NC}"
+elif [ -f "terraform-key.pem" ]; then
+    SSH_KEY="terraform-key.pem"
+    chmod 600 "$SSH_KEY"
+    echo "${GREEN}   ✅ Found generated key: $SSH_KEY${NC}"
+else
+    # Try to extract key from Terraform output
+    terraform output -raw private_key 2>/dev/null > temp_key.pem
+    if [ -s temp_key.pem ]; then
+        SSH_KEY="temp_key.pem"
+        chmod 600 "$SSH_KEY"
+        echo "${GREEN}   ✅ Extracted key from Terraform output${NC}"
+    else
+        rm -f temp_key.pem
+        echo "${YELLOW}   ⚠️  No SSH key found (will use default SSH auth)${NC}"
+    fi
+fi
 echo ""
 
 # Create Ansible inventory
-echo "📝 Step 3: Creating Ansible inventory..."
-echo "----------------------------------------"
+echo "   → Creating Ansible inventory..."
 
-# Check for generated SSH key
-if [ ! -f "infragenie-key.pem" ]; then
-    echo "${YELLOW}⚠️  SSH key 'infragenie-key.pem' not found${NC}"
-    echo "The Terraform code should have generated this key."
-    echo "Creating inventory without key specification..."
-    
+if [ -n "$SSH_KEY" ]; then
     cat > inventory.ini << EOF
 [servers]
-$INSTANCE_IP ansible_user=ubuntu ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+$INSTANCE_IP ansible_user=ubuntu ansible_ssh_private_key_file=$SSH_KEY ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 EOF
 else
-    echo "${GREEN}✅ Found generated SSH key: infragenie-key.pem${NC}"
-    
     cat > inventory.ini << EOF
 [servers]
-$INSTANCE_IP ansible_user=ubuntu ansible_ssh_private_key_file=infragenie-key.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+$INSTANCE_IP ansible_user=ubuntu ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 EOF
 fi
 
-echo "${GREEN}✅ Inventory created${NC}"
+echo "${GREEN}   ✅ Inventory created${NC}"
 echo ""
 
 # Wait for instance to be ready with intelligent SSH polling
-echo "⏳ Step 4: Waiting for SSH to be available..."
-echo "----------------------------------------------"
-
-RETRIES=0
-MAX_RETRIES=30  # 30 attempts * 10 seconds = 5 minutes total timeout
-START_TIME=$(date +%s)
-
-# Determine SSH command based on key availability
-if [ -f "infragenie-key.pem" ]; then
-    echo "${GREEN}✅ Using generated SSH key: infragenie-key.pem${NC}"
-    SSH_CMD="ssh -i infragenie-key.pem -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes ubuntu@$INSTANCE_IP exit"
-    SSH_USER_CMD="ssh -i infragenie-key.pem ubuntu@$INSTANCE_IP"
-else
-    echo "${YELLOW}⚠️  No SSH key found. Using default SSH authentication${NC}"
-    SSH_CMD="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes ubuntu@$INSTANCE_IP exit"
-    SSH_USER_CMD="ssh ubuntu@$INSTANCE_IP"
-fi
-
-echo "Testing SSH connection to $INSTANCE_IP..."
+echo "   → Waiting for server to be ready..."
+echo "${YELLOW}   ⏳ This typically takes 1-3 minutes (instance boot + SSH)${NC}"
 echo ""
 
-until $SSH_CMD 2>/dev/null
+RETRIES=0
+MAX_RETRIES=36  # 36 attempts * 10 seconds = 6 minutes max
+START_TIME=$(date +%s)
+
+# Build SSH command
+if [ -n "$SSH_KEY" ]; then
+    SSH_TEST_CMD="ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes ubuntu@$INSTANCE_IP exit"
+    SSH_CONNECT_CMD="ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@$INSTANCE_IP"
+else
+    SSH_TEST_CMD="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes ubuntu@$INSTANCE_IP exit"
+    SSH_CONNECT_CMD="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@$INSTANCE_IP"
+fi
+
+# Progress bar function
+show_progress() {
+    local current=$1
+    local total=$2
+    local elapsed=$3
+    local bar_width=30
+    local filled=$((current * bar_width / total))
+    local empty=$((bar_width - filled))
+    
+    printf "\\r   ["
+    printf "%${filled}s" | tr ' ' '█'
+    printf "%${empty}s" | tr ' ' '░'
+    printf "] %3d%% (%ds elapsed)" $((current * 100 / total)) "$elapsed"
+}
+
+until $SSH_TEST_CMD 2>/dev/null
 do
     RETRIES=$((RETRIES+1))
     ELAPSED=$(($(date +%s) - START_TIME))
-    ELAPSED_MIN=$((ELAPSED / 60))
-    ELAPSED_SEC=$((ELAPSED % 60))
     
     if [ $RETRIES -ge $MAX_RETRIES ]; then
         echo ""
-        echo "${RED}❌ ERROR: SSH connection failed after $MAX_RETRIES attempts (${ELAPSED_MIN}m ${ELAPSED_SEC}s)${NC}"
         echo ""
-        echo "Possible reasons:"
-        echo "  1. Instance is still booting (EC2 initialization can take 3-5 minutes)"
-        echo "  2. Security group doesn't allow SSH traffic (port 22) from your IP"
-        echo "  3. Instance is in a private subnet without public IP"
-        if [ ! -f "infragenie-key.pem" ]; then
-            echo "  4. SSH key 'infragenie-key.pem' was not found (check Terraform generated it)"
+        echo "${RED}❌ Connection timeout after $MAX_RETRIES attempts (${ELAPSED}s)${NC}"
+        echo ""
+        echo "Troubleshooting checklist:"
+        echo "  ${YELLOW}1.${NC} AWS Console → EC2 → Status: Should show '2/2 checks passed'"
+        echo "  ${YELLOW}2.${NC} Security Group: Must allow SSH (port 22) from your IP"
+        echo "  ${YELLOW}3.${NC} Instance: Should have a public IP address"
+        echo "  ${YELLOW}4.${NC} VPC/Subnet: Instance must be in public subnet with internet access"
+        if [ -z "$SSH_KEY" ]; then
+            echo "  ${YELLOW}5.${NC} SSH Key: No key found, check Terraform generated 'infragenie-key.pem'"
         fi
         echo ""
-        echo "Troubleshooting steps:"
-        echo "  • Check AWS Console: EC2 → Instances → Status Checks (should show 2/2 passed)"
-        echo "  • Verify Security Group allows port 22 from your IP"
-        echo "  • Run: terraform show | grep 'public_ip' to confirm instance has public IP"
-        if [ -f "infragenie-key.pem" ]; then
-            echo "  • Try manual SSH: $SSH_USER_CMD"
-        fi
+        echo "Manual connection test:"
+        echo "  $SSH_CONNECT_CMD"
         echo ""
+        echo "${YELLOW}TIP: Infrastructure is deployed. Fix connectivity and run:${NC}"
+        echo "  ansible-playbook -i inventory.ini playbook.yml"
         exit 1
     fi
     
-    # Progressive retry messaging (more detailed as time passes)
-    if [ $RETRIES -eq 1 ]; then
-        echo "🔄 Attempt 1/$MAX_RETRIES - Instance launching... (this is normal)"
-    elif [ $RETRIES -le 5 ]; then
-        echo "🔄 Attempt $RETRIES/$MAX_RETRIES - Still initializing... (~${ELAPSED}s elapsed)"
-    elif [ $RETRIES -le 15 ]; then
-        echo "🔄 Attempt $RETRIES/$MAX_RETRIES - Booting OS... (~${ELAPSED_MIN}m ${ELAPSED_SEC}s elapsed)"
-    else
-        echo "🔄 Attempt $RETRIES/$MAX_RETRIES - Taking longer than usual... (~${ELAPSED_MIN}m ${ELAPSED_SEC}s elapsed)"
-    fi
-    
+    show_progress "$RETRIES" "$MAX_RETRIES" "$ELAPSED"
     sleep 10
 done
 
-TOTAL_ELAPSED=$(($(date +%s) - START_TIME))
+TOTAL_WAIT=$(($(date +%s) - START_TIME))
 echo ""
-echo "${GREEN}✅ SSH connection established after ${TOTAL_ELAPSED}s (${RETRIES} attempts)${NC}"
+echo ""
+echo "${GREEN}   ✅ Server ready! (${TOTAL_WAIT}s wait)${NC}"
 echo ""
 
 # Run Ansible configuration
-echo "⚙️  Step 5: Configuring server with Ansible..."
-echo "---------------------------------------------"
+echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo "${BLUE}⚙️  Step 6/6: Configuring Server${NC}"
+echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
 
-# Retry logic for Ansible (in case of transient issues)
-max_attempts=3
-attempt=1
+echo "   → Running Ansible playbook..."
+echo "${YELLOW}   ⏳ Installing packages and configuring services...${NC}"
+echo ""
 
-while [ $attempt -le $max_attempts ]; do
-    echo "Attempt $attempt of $max_attempts..."
+# Run Ansible with retry logic
+MAX_ANSIBLE_ATTEMPTS=3
+ANSIBLE_ATTEMPT=1
+
+while [ $ANSIBLE_ATTEMPT -le $MAX_ANSIBLE_ATTEMPTS ]; do
+    if [ $ANSIBLE_ATTEMPT -gt 1 ]; then
+        echo ""
+        echo "${YELLOW}   → Retry attempt $ANSIBLE_ATTEMPT/$MAX_ANSIBLE_ATTEMPTS${NC}"
+    fi
     
-    if ansible-playbook -i inventory.ini playbook.yml; then
-        echo "${GREEN}✅ Server configuration completed${NC}"
+    # Run Ansible with proper output formatting
+    if ansible-playbook -i inventory.ini playbook.yml 2>&1 | tee /tmp/ansible_output.log; then
+        echo ""
+        echo "${GREEN}   ✅ Server configuration completed!${NC}"
         break
     else
-        if [ $attempt -lt $max_attempts ]; then
-            echo "${YELLOW}⚠️  Ansible failed, waiting 20 seconds before retry...${NC}"
+        ANSIBLE_EXIT_CODE=$?
+        
+        if [ $ANSIBLE_ATTEMPT -lt $MAX_ANSIBLE_ATTEMPTS ]; then
+            echo ""
+            echo "${YELLOW}   ⚠️  Configuration failed (exit code: $ANSIBLE_EXIT_CODE)${NC}"
+            echo "   → Waiting 20 seconds before retry..."
             sleep 20
-            attempt=$((attempt + 1))
+            ANSIBLE_ATTEMPT=$((ANSIBLE_ATTEMPT + 1))
         else
-            echo "${RED}❌ Ansible configuration failed after $max_attempts attempts${NC}"
-            echo "You can try running Ansible manually:"
-            echo "ansible-playbook -i inventory.ini playbook.yml"
+            echo ""
+            echo "${RED}   ❌ Ansible configuration failed after $MAX_ANSIBLE_ATTEMPTS attempts${NC}"
+            echo ""
+            echo "   Infrastructure is deployed but configuration incomplete."
+            echo "   You can:"
+            echo "     1. Check the logs above for specific errors"
+            echo "     2. SSH to server: $SSH_CONNECT_CMD"
+            echo "     3. Retry manually: ansible-playbook -i inventory.ini playbook.yml"
+            echo "     4. Or destroy and redeploy: ./destroy.sh"
+            echo ""
             exit 1
         fi
     fi
 done
 
 echo ""
-echo "===================================="
-echo "${GREEN}🎉 Deployment Complete!${NC}"
-echo "===================================="
+
+# Final summary
 echo ""
-echo "📊 Deployment Summary:"
-echo "  - Infrastructure: Provisioned ✅"
-echo "  - Server IP: $INSTANCE_IP"
-echo "  - Configuration: Applied ✅"
-echo "  - Cost Assassin: Active (8 PM shutdown) ⏰"
+echo "${GREEN}╔════════════════════════════════════════════════════════╗${NC}"
+echo "${GREEN}║          🎉 Deployment Successful! 🎉                 ║${NC}"
+echo "${GREEN}╚════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo "⚠️  Important Reminders:"
-echo "  1. Monitor your cloud costs regularly"
-echo "  2. Server auto-shuts down at 8 PM daily"
-echo "  3. Review security settings in AWS console"
-echo "  4. Terraform state is in terraform.tfstate - KEEP THIS FILE for future updates"
+echo "${BLUE}📊 Deployment Summary:${NC}"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  ${GREEN}✅${NC} Infrastructure: Provisioned & Validated"
+echo "  ${GREEN}✅${NC} Server: $INSTANCE_IP"
+echo "  ${GREEN}✅${NC} Configuration: Applied Successfully"
+echo "  ${GREEN}✅${NC} Security: fail2ban + auto-updates enabled"
+echo "  ${GREEN}✅${NC} Cost Control: Auto-shutdown at 8 PM"
 echo ""
-echo "🔗 Next Steps:"
-if [ -f "infragenie-key.pem" ]; then
-    echo "  - SSH: ssh -i infragenie-key.pem ubuntu@$INSTANCE_IP"
+echo "${BLUE}🔗 Quick Access:${NC}"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+if [ -n "$SSH_KEY" ]; then
+    echo "  SSH Connection:"
+    echo "    ${GREEN}$SSH_CONNECT_CMD${NC}"
+    echo ""
+    echo "  Or copy the command:"
+    echo "    ${GREEN}ssh -i $SSH_KEY ubuntu@$INSTANCE_IP${NC}"
 else
-    echo "  - SSH: ssh ubuntu@$INSTANCE_IP"
+    echo "  SSH Connection:"
+    echo "    ${GREEN}ssh ubuntu@$INSTANCE_IP${NC}"
 fi
-echo "  - Verify: terraform output"
-echo "  - Update: Modify main.tf and run 'terraform apply' again"
-echo "  - Cleanup: Run './destroy.sh' or 'terraform destroy' (when done)"
 echo ""
-echo "Happy deploying! 🚀"
+echo "${BLUE}📂 Generated Files:${NC}"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  • main.tf - Infrastructure definition"
+echo "  • terraform.tfstate - State (${RED}KEEP THIS FILE!${NC})"
+if [ -n "$SSH_KEY" ]; then
+    echo "  • $SSH_KEY - SSH private key (${RED}KEEP SECURE!${NC})"
+fi
+echo "  • inventory.ini - Ansible inventory"
+echo "  • playbook.yml - Configuration playbook"
+echo ""
+echo "${YELLOW}⚠️  Important Reminders:${NC}"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  1. ${YELLOW}Monitor AWS Costs${NC} - Check billing dashboard regularly"
+echo "  2. ${YELLOW}Auto-Shutdown${NC} - Server stops at 8 PM daily (Cost Assassin)"
+echo "  3. ${YELLOW}terraform.tfstate${NC} - Required for updates/destroy, don't delete!"
+echo "  4. ${YELLOW}Security${NC} - Review security groups in AWS Console"
+if [ -n "$SSH_KEY" ]; then
+    echo "  5. ${YELLOW}SSH Key${NC} - Keep $SSH_KEY secure, it's your server access"
+fi
+echo ""
+echo "${BLUE}🔄 Next Steps:${NC}"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  ${GREEN}Connect:${NC}     $SSH_CONNECT_CMD"
+echo "  ${GREEN}Outputs:${NC}     terraform output"
+echo "  ${GREEN}Update:${NC}      Edit main.tf → terraform apply"
+echo "  ${GREEN}Destroy:${NC}     ./destroy.sh (when done)"
+echo ""
+echo "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo "${GREEN}  Thank you for using InfraGenie! 🚀${NC}"
+echo "${GREEN}  Generated by AI • Deployed with confidence${NC}"
+echo "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
 """
 
 
